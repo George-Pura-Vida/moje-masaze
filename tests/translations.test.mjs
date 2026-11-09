@@ -30,3 +30,11 @@ test('no customer payment data and API tokens are committed in tracked source',(
  assert.ok(lib.includes("MASSAGE_EUR_ENABLED"));
  assert.ok(lib.includes("MASSAGE_PRIVATE_DIR"));
 });
+
+test('slot availability labels cannot change the submitted booking time',()=>{
+ const html=readFileSync(new URL('../index.php',import.meta.url),'utf8');
+ const options=html.match(/<select name="time" id="time">([\s\S]*?)<\/select>/)?.[1]??'';
+ const hours=[...options.matchAll(/<option(?:\s+value="([^"]*)")?>(\d{2}:00)<\/option>/g)];
+ assert.equal(hours.length,11);
+ for(const [,value,label] of hours)assert.equal(value,label);
+});

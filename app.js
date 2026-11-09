@@ -19,11 +19,11 @@ function t(k){return translations[lang]?.[k]||ui[lang]?.[k]||ui.cs[k]||k;}
 function format(cents,ccy='CZK'){return new Intl.NumberFormat(regional[lang],{style:'currency',currency:ccy,minimumFractionDigits:cents%100===0?0:2,maximumFractionDigits:cents%100===0?0:2}).format(cents/100);}
 function priceCents(){const base=duration.value==='180'?300000:200000,n=Number(quantity.value),pct=n===2?95:n===3?90:100;return base*n*pct/100;}
 const contactCopy={
- cs:{eyebrow:'OSOBNÍ KONTAKT',title:'Napište mi. Rád odpovím.',description:'Máte otázku k masážím, volným termínům nebo dárkovým poukazům? Nechte mi zprávu. Odpověď dostanete osobně.',name:'Jméno a příjmení *',email:'E-mail *',phone:'Telefon (nepovinný)',subject:'Předmět zprávy *',subjectMassage:'Dotaz k masáži',subjectBooking:'Termíny a rezervace',subjectGift:'Dárkové poukazy',subjectOther:'Jiný dotaz',message:'Vaše zpráva *',consent:'Souhlasím se zpracováním údajů pouze pro vyřízení dotazu a odpověď.',privacy:'Ochrana osobních údajů',send:'Odeslat zprávu ↗',adminLink:'Administrace',sending:'Odesílám zprávu…',sent:'Děkuji! Zpráva je bezpečně uložena. Potvrzení přijde e-mailem.',error:'Zprávu nelze odeslat. Zkuste to prosím znovu.',invalid:'Doplňte povinné údaje.'},
- sk:{eyebrow:'OSOBNÝ KONTAKT',title:'Napíšte mi. Rád odpoviem.',description:'Máte otázky k masážam, termínom alebo poukazom? Pošlite mi správu.',name:'Meno a priezvisko *',email:'E-mail *',phone:'Telefón (voliteľný)',subject:'Predmet správy *',subjectMassage:'Otázka k masáži',subjectBooking:'Termíny a rezervácie',subjectGift:'Darčekové poukazy',subjectOther:'Iná otázka',message:'Vaša správa *',consent:'Súhlasím so spracovaním údajov na vybavenie otázky a odpoveď.',privacy:'Ochrana osobných údajov',send:'Odoslať správu ↗',adminLink:'Administrácia',sending:'Odosielam správu…',sent:'Ďakujem! Správa bola uložená. Potvrdenie príde e-mailom.',error:'Správu nemožno odoslať.',invalid:'Doplňte povinné údaje.'},
- en:{eyebrow:'GET IN TOUCH',title:'Have a question? I’m here to help.',description:'Ask about massages, available times or gift vouchers. I will respond personally.',name:'Full name *',email:'Email *',phone:'Phone (optional)',subject:'Message subject *',subjectMassage:'Question about a massage',subjectBooking:'Appointments and reservations',subjectGift:'Gift vouchers',subjectOther:'Other question',message:'Your message *',consent:'I agree to the processing of my details only to answer this enquiry.',privacy:'Privacy policy',send:'Send message ↗',adminLink:'Administration',sending:'Sending your message…',sent:'Thank you! Your message has been saved. A confirmation email will follow.',error:'Unable to send the message.',invalid:'Please complete the required fields.'},
- es:{eyebrow:'CONTACTO PERSONAL',title:'Escríbeme. Estaré encantado de responder.',description:'¿Tienes preguntas sobre masajes, horarios o tarjetas regalo? Envíame un mensaje.',name:'Nombre completo *',email:'Correo electrónico *',phone:'Teléfono (opcional)',subject:'Asunto *',subjectMassage:'Consulta sobre masajes',subjectBooking:'Citas y reservas',subjectGift:'Tarjetas regalo',subjectOther:'Otra consulta',message:'Tu mensaje *',consent:'Acepto el tratamiento de los datos únicamente para responder a mi consulta.',privacy:'Privacidad',send:'Enviar mensaje ↗',adminLink:'Administración',sending:'Enviando mensaje…',sent:'¡Gracias! Tu mensaje se ha guardado. Recibirás una confirmación por email.',error:'No se pudo enviar el mensaje.',invalid:'Completa los campos obligatorios.'},
- zh:{eyebrow:'直接联系',title:'欢迎留言，我会亲自回复。',description:'对按摩、预约时间或礼品券有疑问？请给我留言。',name:'姓名 *',email:'邮箱 *',phone:'电话（选填）',subject:'主题 *',subjectMassage:'按摩咨询',subjectBooking:'预约与时间',subjectGift:'礼品券',subjectOther:'其他问题',message:'留言 *',consent:'我同意仅为回复咨询而处理我的联系信息。',privacy:'隐私政策',send:'发送消息 ↗',adminLink:'管理后台',sending:'正在发送…',sent:'谢谢！您的留言已保存，确认邮件稍后发送。',error:'暂时无法发送消息。',invalid:'请填写必填信息。'}
+ cs:{eyebrow:'OSOBNÍ KONTAKT',title:'Napište mi. Rád odpovím.',description:'Máte otázku k masážím, volným termínům nebo dárkovým poukazům? Nechte mi zprávu. Odpověď dostanete osobně.',name:'Jméno a příjmení *',email:'E-mail *',phone:'Telefon (nepovinný)',subject:'Předmět zprávy *',subjectMassage:'Dotaz k masáži',subjectBooking:'Termíny a rezervace',subjectGift:'Dárkové poukazy',subjectOther:'Jiný dotaz',message:'Vaše zpráva *',consent:'Souhlasím se zpracováním údajů pouze pro vyřízení dotazu a odpověď.',privacy:'Ochrana osobních údajů',send:'Odeslat zprávu ↗',adminLink:'Administrace',sending:'Odesílám zprávu…',sentTitle:'Zpráva přijata',sent:'Děkuji za zprávu. Potvrzení vám přijde e-mailem.',error:'Zprávu nelze odeslat. Zkuste to prosím znovu.',invalid:'Doplňte povinné údaje.'},
+ sk:{eyebrow:'OSOBNÝ KONTAKT',title:'Napíšte mi. Rád odpoviem.',description:'Máte otázky k masážam, termínom alebo poukazom? Pošlite mi správu.',name:'Meno a priezvisko *',email:'E-mail *',phone:'Telefón (voliteľný)',subject:'Predmet správy *',subjectMassage:'Otázka k masáži',subjectBooking:'Termíny a rezervácie',subjectGift:'Darčekové poukazy',subjectOther:'Iná otázka',message:'Vaša správa *',consent:'Súhlasím so spracovaním údajov na vybavenie otázky a odpoveď.',privacy:'Ochrana osobných údajov',send:'Odoslať správu ↗',adminLink:'Administrácia',sending:'Odosielam správu…',sentTitle:'Správa prijatá',sent:'Ďakujem za správu. Potvrdenie vám príde e-mailom.',error:'Správu nemožno odoslať.',invalid:'Doplňte povinné údaje.'},
+ en:{eyebrow:'GET IN TOUCH',title:'Have a question? I’m here to help.',description:'Ask about massages, available times or gift vouchers. I will respond personally.',name:'Full name *',email:'Email *',phone:'Phone (optional)',subject:'Message subject *',subjectMassage:'Question about a massage',subjectBooking:'Appointments and reservations',subjectGift:'Gift vouchers',subjectOther:'Other question',message:'Your message *',consent:'I agree to the processing of my details only to answer this enquiry.',privacy:'Privacy policy',send:'Send message ↗',adminLink:'Administration',sending:'Sending your message…',sentTitle:'Message received',sent:'Thank you for your message. You’ll receive a confirmation email.',error:'Unable to send the message.',invalid:'Please complete the required fields.'},
+ es:{eyebrow:'CONTACTO PERSONAL',title:'Escríbeme. Estaré encantado de responder.',description:'¿Tienes preguntas sobre masajes, horarios o tarjetas regalo? Envíame un mensaje.',name:'Nombre completo *',email:'Correo electrónico *',phone:'Teléfono (opcional)',subject:'Asunto *',subjectMassage:'Consulta sobre masajes',subjectBooking:'Citas y reservas',subjectGift:'Tarjetas regalo',subjectOther:'Otra consulta',message:'Tu mensaje *',consent:'Acepto el tratamiento de los datos únicamente para responder a mi consulta.',privacy:'Privacidad',send:'Enviar mensaje ↗',adminLink:'Administración',sending:'Enviando mensaje…',sentTitle:'Mensaje recibido',sent:'Gracias por tu mensaje. Recibirás una confirmación por correo electrónico.',error:'No se pudo enviar el mensaje.',invalid:'Completa los campos obligatorios.'},
+ zh:{eyebrow:'直接联系',title:'欢迎留言，我会亲自回复。',description:'对按摩、预约时间或礼品券有疑问？请给我留言。',name:'姓名 *',email:'邮箱 *',phone:'电话（选填）',subject:'主题 *',subjectMassage:'按摩咨询',subjectBooking:'预约与时间',subjectGift:'礼品券',subjectOther:'其他问题',message:'留言 *',consent:'我同意仅为回复咨询而处理我的联系信息。',privacy:'隐私政策',send:'发送消息 ↗',adminLink:'管理后台',sending:'正在发送…',sentTitle:'已收到留言',sent:'感谢您的留言。您将收到确认邮件。',error:'暂时无法发送消息。',invalid:'请填写必填信息。'}
 };
 function renderContactLanguage(){
  const messages=contactCopy[lang]||contactCopy.cs;
@@ -91,7 +91,16 @@ let slotsEpoch=0;
 function setSlotNotice(message,type=''){const el=$('#slotNotice');if(!el)return;el.textContent=(slotsMessages[lang]||slotsMessages.cs)[message];el.classList.toggle('warning',type==='warning');}
 async function refreshSlots(){
  const selected=$('#date').value,select=$('#time'),epoch=++slotsEpoch;
- if(!selected){for(const opt of select.options)opt.disabled=false;setSlotNotice('initial');return;}
+ if(!selected){
+  select.value='';
+  for(const opt of select.options){
+   if(opt.value==='')continue;
+   opt.disabled=true;
+   opt.textContent=opt.value;
+  }
+  setSlotNotice('initial');
+  return;
+ }
  setSlotNotice('loading');
  for(const opt of select.options)if(opt.value!=='')opt.disabled=true;
  try{
@@ -172,10 +181,12 @@ $('#checkPay').addEventListener('click',async()=>{
   }
  }catch{paymentFeedback.textContent=t('checkFail');}
 });
-const messageForm=$('#messageForm'),messageStatus=$('#messageStatus'),messageButton=$('#sendMessage');
-if(messageForm&&messageStatus&&messageButton){
+const messageForm=$('#messageForm'),messageStatus=$('#messageStatus'),messageButton=$('#sendMessage'),messageReceipt=$('#messageReceipt');
+if(messageForm&&messageStatus&&messageButton&&messageReceipt){
  messageForm.addEventListener('submit',async e=>{
   e.preventDefault();
+  if(messageButton.disabled)return;
+  messageReceipt.hidden=true;
   const msg=contactCopy[lang]||contactCopy.cs;
   if(!messageForm.checkValidity()){messageForm.reportValidity();messageStatus.textContent=msg.invalid;messageStatus.classList.add('error');return;}
   const data=Object.fromEntries(new FormData(messageForm));data.terms=messageForm.elements.terms.checked;data.csrf=$('meta[name="mm-csrf"]').content;
@@ -184,8 +195,11 @@ if(messageForm&&messageStatus&&messageButton){
    const result=await fetch('contact-message.php',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(data)});
    const raw=await result.text();let body;
    try{body=JSON.parse(raw);}catch{throw Error('Webový server nevrátil platnou odpověď. Zkontrolujte system-status.php.');}
-   if(!result.ok)throw Error((body.error||msg.error)+(result.status>=500?' (server '+result.status+')':''));
-   messageForm.reset();messageStatus.textContent=msg.sent;
+   if(!result.ok||body?.ok!==true)throw Error((body?.error||msg.error)+(result.status>=500?' (server '+result.status+')':''));
+   messageForm.reset();
+   messageStatus.textContent='';
+   messageReceipt.hidden=false;
+   messageReceipt.scrollIntoView({block:'center'});
   }catch(err){messageStatus.textContent=err.message||msg.error;messageStatus.classList.add('error');}
   finally{messageButton.disabled=false;}
  });

@@ -72,7 +72,7 @@ header('X-Frame-Options: SAMEORIGIN');
 <div class="currency-choice"><label for="currency"><span data-t="currencyLabel">Měna platby</span><select id="currency" name="currency" aria-describedby="currencyHelp"><option value="CZK">🇨🇿 CZK · česká koruna</option><option value="EUR">🇪🇺 EUR · euro</option></select></label><p id="currencyHelp" role="status" aria-live="polite">Cena v EUR se přepočítává podle kurzu ČNB a zaokrouhluje na celá eura.</p></div>
 <div class="price-summary"><span data-t="totalPrice">Celková cena</span><strong id="total">2 000 Kč</strong><small id="discountInfo"></small></div>
 <h3 data-t="contactDetails">Kontaktní údaje</h3><div class="fields two"><label><span data-t="name">Jméno a příjmení *</span><input name="name" id="name" type="text" maxlength="100" required autocomplete="name"></label><label><span data-t="email">E-mail *</span><input name="email" id="email" type="email" maxlength="254" required autocomplete="email"></label></div><div class="fields two"><label><span data-t="phone">Telefon *</span><input name="phone" type="tel" maxlength="25" required autocomplete="tel" placeholder="+420"></label><label id="recipientBox" hidden><span data-t="recipient">Jméno obdarovaného (nepovinné)</span><input name="recipient" type="text" maxlength="100"></label><label id="dateBox"><span data-t="prefDate">Preferovaný termín</span><input name="date" id="date" type="date" aria-describedby="slotNotice" autocomplete="off"></label></div>
-<label id="timeBox"><span data-t="prefTime">Preferovaná hodina</span><select name="time" id="time"><option value="" data-t="timeAny">Dle domluvy</option><option>09:00</option><option>10:00</option><option>11:00</option><option>12:00</option><option>13:00</option><option>14:00</option><option>15:00</option><option>16:00</option><option>17:00</option><option>18:00</option><option>19:00</option></select></label>
+<label id="timeBox"><span data-t="prefTime">Preferovaná hodina</span><select name="time" id="time"><option value="" data-t="timeAny">Dle domluvy</option><option value="09:00">09:00</option><option value="10:00">10:00</option><option value="11:00">11:00</option><option value="12:00">12:00</option><option value="13:00">13:00</option><option value="14:00">14:00</option><option value="15:00">15:00</option><option value="16:00">16:00</option><option value="17:00">17:00</option><option value="18:00">18:00</option><option value="19:00">19:00</option></select></label>
 <p id="slotNotice" class="booking-availability" aria-live="polite">Datum a hodinu můžete zvolit již nyní. Souhlas je potřeba až při odeslání objednávky.</p>
 <label><span data-t="note">Poznámka nebo přání (nepovinné)</span><textarea name="note" maxlength="600" rows="3" data-ph="notePlaceholder" placeholder="Co by vám pomohlo cítit se při masáži dobře?"></textarea></label><p class="form-hint" data-t="noMedical">Citlivé zdravotní informace prosím neposílejte formulářem; probereme je osobně.</p>
 
@@ -90,6 +90,15 @@ header('X-Frame-Options: SAMEORIGIN');
    <div class="contact-quick"><a href="tel:+420777796148">☎ +420 777 796 148</a><a href="mailto:info@jirijanousek.cz">✉ info@jirijanousek.cz</a></div>
   </div>
   <form id="messageForm" class="contact-form-card" novalidate>
+   <div role="status" aria-atomic="true">
+    <div id="messageReceipt" class="contact-receipt" hidden>
+     <span class="contact-receipt-icon" aria-hidden="true">✓</span>
+     <div>
+      <h3 data-contact="sentTitle">Zpráva přijata</h3>
+      <p data-contact="sent">Děkuji za zprávu. Potvrzení vám přijde e-mailem.</p>
+     </div>
+    </div>
+   </div>
    <div class="fields two">
     <label><span data-contact="name">Jméno a příjmení *</span><input name="name" autocomplete="name" maxlength="120" required></label>
     <label><span data-contact="email">E-mail *</span><input name="email" type="email" maxlength="254" autocomplete="email" required></label>

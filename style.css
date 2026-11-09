@@ -34,6 +34,10 @@
 .contact-form-card .check span{display:inline;margin:0}
 .contact-form-card .check a{color:#7a592d}
 .contact-form-card button{margin-top:8px}
+.contact-receipt:not([hidden]){display:grid;grid-template-columns:auto minmax(0,1fr);align-items:start;gap:14px;margin:0 0 24px;padding:clamp(14px,3vw,22px);border:2px solid #356348;border-radius:12px;background:#e6f2e8;color:#153c28;scroll-margin-top:100px}
+.contact-receipt-icon{display:grid;place-items:center;width:32px;height:32px;border-radius:50%;background:#245537;color:#fff;font-size:1.2rem;font-weight:800}
+.contact-receipt h3{margin:0 0 4px;font-size:clamp(1.3rem,2.5vw,1.65rem);line-height:1.2;color:inherit}
+.contact-receipt p{margin:0;font-size:1.05rem;line-height:1.45;color:inherit}
 #messageStatus{font-size:.9rem;line-height:1.6;min-height:1.4em;color:#2b6242}
 #messageStatus.error{color:#9b4538}
 @media(max-width:850px){.contact-form-layout{grid-template-columns:1fr}.contact-form-section{padding-block:40px}.contact-form-intro h2{font-size:35px}}
