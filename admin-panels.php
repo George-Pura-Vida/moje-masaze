@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+if(!defined('MM_AUTHENTICATED')||MM_AUTHENTICATED!==true){http_response_code(404);exit;}
 /** Owner-only CRM dashboard. Included exclusively inside the authenticated admin view. */
 $db=mm_db();
 $search=trim((string)($_GET['q']??''));
@@ -86,7 +87,7 @@ $upcoming=$db->query("SELECT id,client_id,buyer_name,focus,duration,kind,confirm
 <nav class="crmnav" aria-label="Správa systému">
  <a href="#dashboard">📊 Přehled</a><a href="#clients">👥 Klienti</a>
  <a href="#calendar">📆 Kalendář</a><a href="#inquiries">✉️ Zprávy <?php if($inboxNew):?>(<?=$inboxNew?>)<?php endif;?></a>
- <a href="#orders">💳 Objednávky a platby</a>
+ <a href="#orders">💳 Objednávky a platby</a><a href="#security">🔐 Heslo a zabezpečení</a>
 </nav>
 <section id="dashboard" class="crmpanel"><h2>Manažerský přehled</h2>
  <p class="crmhint">Příjmy zahrnují pouze objednávky ověřeně uhrazené bankou. EUR a CZK se nesčítají dohromady.</p>
@@ -170,4 +171,23 @@ $upcoming=$db->query("SELECT id,client_id,buyer_name,focus,duration,kind,confirm
    <button type="submit">Uložit stav</button>
   </form>
  </div><?php endforeach;?>
+</section>
+
+<section class="crmpanel" id="security">
+ <div class="crmtitle"><h2>🔐 Administrátorský účet a zabezpečení</h2><span class="crmstatus">Pouze správce</span></div>
+ <p>Účet: <strong>jgjanousek@gmail.com</strong>. Nové heslo zůstává výhradně ve formě bezpečného hashe v soukromé části serveru, mimo zdrojový kód a veřejný GitHub.</p>
+ <div class="crmcols">
+  <div><h3>Změnit administrátorské heslo</h3>
+  <form method="post" class="crmform" autocomplete="off">
+   <input type="hidden" name="csrf" value="<?=h(mm_csrf())?>">
+   <input type="hidden" name="action" value="change_password">
+   <label style="flex-basis:100%">Současné heslo<input name="current_password" type="password" required autocomplete="current-password"></label>
+   <label style="flex-basis:100%">Nové heslo (min. 12 znaků)<input name="new_password" type="password" minlength="12" maxlength="128" required autocomplete="new-password"></label>
+   <label style="flex-basis:100%">Nové heslo znovu<input name="new_password_again" type="password" minlength="12" maxlength="128" required autocomplete="new-password"></label>
+   <button type="submit">Uložit nové heslo</button>
+  </form></div>
+  <div><h3>Zapomenuté heslo</h3><p>Po odhlášení klikněte na <strong>Zapomenuté heslo?</strong>. Systém pošle jednorázový odkaz pouze na schválený administrátorský e-mail, který lze použít nejpozději do 30 minut.</p>
+  <p class="crmhint">Odkaz nikdy neobsahuje současné heslo. Obnova vyžaduje funkční odesílání e-mailů na WebKitty. Po změně hesla se ostatní administrátorské relace odhlásí.</p>
+  <p class="crmhint">Administrace je přístupná jen přes přihlášení, bez veřejné registrace.</p></div>
+ </div>
 </section>
