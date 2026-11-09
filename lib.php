@@ -353,15 +353,57 @@ function mm_mail_template(array $o,string $kind): array {
   if(!$paid && !$admin)$extra='<p style="margin:22px 0"><a href="'.mm_escape($payUrl).'" style="display:inline-block;background:#b08351;color:#fff;padding:13px 22px;text-decoration:none;border-radius:8px;font-weight:bold">'.mm_escape($L['link']??'📱 Otevřít platební QR kód').'</a></p>';
   if(!$paid)$extra.='<p style="background:#f9f2e5;padding:15px;border-radius:9px">Před potvrzením úhrady zkontrolujte měnu, částku, účet <strong>'.mm_escape(($o['currency']??'CZK')==='EUR'?($o['bank_iban']?:mm_eur_iban()):MM_ACCOUNT).'</strong> a VS <strong>'.mm_escape($o['vs']).'</strong>. U EUR platby uveďte také referenci MMVS-'.mm_escape($o['vs']).' ve zprávě pro příjemce. Samotný QR kód není dokladem platby.</p>';
   if($paid&&$gift&&!$admin)$extra='<p style="margin:26px 0"><a href="'.mm_escape($url).'" style="background:#aa7d47;color:#fff;padding:13px 24px;text-decoration:none;border-radius:8px;font-weight:700">🎁 '.mm_escape($L['voucher']??'Zobrazit dárkový poukaz').'</a></p>';
+  if($paid && $gift && !$admin){
+    require_once __DIR__.'/coupon.php';
+    $extra=mm_coupon_html($o,true);
+  }
   $html='<!doctype html><html lang="cs"><head><meta charset="utf-8"></head><body style="background:#f6f1e8;margin:0;padding:24px 10px;font-family:Arial,Helvetica,sans-serif;color:#273227"><table role="presentation" style="max-width:640px;width:100%;border-collapse:collapse;margin:auto;background:#fff;border:1px solid #e4d8c7"><tr><td style="padding:29px;background:#1d2a21;color:#fff;border-bottom:5px solid #c7a06d"><div style="font-family:Georgia,serif;font-size:27px;color:#e8c99d">❁ DOTYK &amp; KLID</div><div style="font-size:12px;letter-spacing:2px;color:#e5e6da">MOJE MASÁŽE • JIŘÍ JANOUŠEK</div></td></tr><tr><td style="padding:28px"><p>'.mm_escape($admin?'Dobrý den, administrátore,':$salutation).'</p><h1 style="font-family:Georgia,serif;font-size:27px;font-weight:400">'.mm_escape($head).'</h1><p>'.mm_escape($intro).'</p><table role="presentation" style="width:100%;background:#fbf8f2;border-collapse:collapse">'.$rows.'</table>'.$extra.'<p style="margin-top:30px;font-size:13px;color:#696b63">S přáním krásného dne,<br><strong>Jiří Janoušek</strong><br>info@jirijanousek.cz<br>+420 777 796 148</p></td></tr><tr><td style="background:#e9e6dd;padding:15px 28px;font-size:11px;color:#737267">Tato zpráva se týká výhradně vaší objednávky. Nejde o reklamní sdělení.</td></tr></table></body></html>';
-  return ['subject'=>$subject,'text'=>$plain,'html'=>$html];
+  return ['subject'=>$subject,'text'=>$plain,'html'=>$html,'inline_qr_token'=>($paid&&$gift&&!$admin)?$o['token']:null];
+}
+function mm_voucher_qr_png(string $token): ?string {
+ if(!preg_match('/\A[a-f0-9]{48}\z/D',$token)||!function_exists('imagepng'))return null;
+ require_once __DIR__.'/vendor/php-qrcode.php';
+ try{
+  $generator=new QRCode('https://moje-masaze.jirijanousek.cz/checkin.php?code='.$token,['s'=>'qrm','sf'=>6,'p'=>15]);
+  $img=$generator->render_image();
+  ob_start();imagepng($img);$bytes=ob_get_clean();imagedestroy($img);
+  return is_string($bytes)&&strlen($bytes)>500&&strlen($bytes)<1000000?$bytes:null;
+ }catch(Throwable $e){error_log('MM voucher QR generation: '.get_class($e));return null;}
 }
 function mm_send(string $to,array $template): bool {
-  if(!filter_var($to,FILTER_VALIDATE_EMAIL))return false;
-  $boundary='mm_'.bin2hex(random_bytes(12));
-  $headers='From: '.mm_header_encoded('Jiří Janoušek • Moje masáže').' <info@jirijanousek.cz>'."\r\n".'Reply-To: info@jirijanousek.cz'."\r\n".'MIME-Version: 1.0'."\r\n".'Content-Type: multipart/alternative; boundary="'.$boundary.'"';
-  $body='--'.$boundary."\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n".chunk_split(base64_encode($template['text'])).'--'.$boundary."\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n".chunk_split(base64_encode($template['html'])).'--'.$boundary."--\r\n";
-  return mail($to,mm_header_encoded($template['subject']),$body,$headers);
+ if(!filter_var($to,FILTER_VALIDATE_EMAIL))return false;
+ $boundary='mm_alt_'.bin2hex(random_bytes(9));
+ $outer='mm_rel_'.bin2hex(random_bytes(9));
+ $html=(string)$template['html'];$plain=(string)$template['text'];
+ $png=null;
+ $token=$template['inline_qr_token']??null;
+ if(is_string($token)&&preg_match('/\A[a-f0-9]{48}\z/D',$token))$png=mm_voucher_qr_png($token);
+ if($png===null){
+  $html=str_replace('cid:mm-gift-qr@moje-masaze','https://moje-masaze.jirijanousek.cz/voucher-qr.php?token='.rawurlencode((string)$token),$html);
+ }
+ $headers='From: '.mm_header_encoded('Jiří Janoušek • Moje masáže').' <info@jirijanousek.cz>'."\r\n".
+    'Reply-To: info@jirijanousek.cz'."\r\n".
+    'MIME-Version: 1.0'."\r\n".
+    'Content-Type: '.($png!==null?'multipart/related; boundary="'.$outer.'"':'multipart/alternative; boundary="'.$boundary.'"');
+ $body='';
+ if($png!==null){
+  $body.='--'.$outer."\r\n".'Content-Type: multipart/alternative; boundary="'.$boundary.'"'."\r\n\r\n";
+ }
+ $body.='--'.$boundary."\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n".
+   chunk_split(base64_encode($plain)).
+   '--'.$boundary."\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n".
+   chunk_split(base64_encode($html)).
+   '--'.$boundary."--\r\n";
+ if($png!==null){
+  $body.='--'.$outer."\r\n".
+   "Content-Type: image/png; name=\"vstupni-qr.png\"\r\n".
+   "Content-ID: <mm-gift-qr@moje-masaze>\r\n".
+   "Content-Disposition: inline; filename=\"vstupni-qr.png\"\r\n".
+   "Content-Transfer-Encoding: base64\r\n\r\n".
+   chunk_split(base64_encode($png)).
+   '--'.$outer."--\r\n";
+ }
+ return mail($to,mm_header_encoded((string)$template['subject']),$body,$headers);
 }
 function mm_dispatch_mail(int $max=20): array {
   $db=mm_db();$rows=$db->query("SELECT q.id AS queue_id,q.kind AS mail_kind,o.* FROM email_queue q JOIN orders o ON o.id=q.order_id WHERE q.status IN ('pending','failed') ORDER BY q.id LIMIT ".max(1,min(50,$max)))->fetchAll();
