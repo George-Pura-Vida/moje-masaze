@@ -164,12 +164,17 @@ function mm_price(int $duration,int $quantity): int {
   return intdiv($unit*$quantity*$percent,100);
 }
 function mm_eur_iban(): string {
- $iban=strtoupper(preg_replace('/\s+/','',mm_config('MASSAGE_EUR_IBAN')));
- if(!preg_match('/\A[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}\z/D',$iban) || $iban===MM_IBAN)return '';
- return $iban;
+ // The owner explicitly confirmed this same Fio account accepts SEPA EUR transfers.
+ // A EUR transfer to its CZK ledger may settle after conversion, so automatic
+ // bank confirmation for EUR must not rely on an incoming CZK amount.
+ $raw=mm_config('MASSAGE_EUR_IBAN',MM_IBAN);
+ $iban=strtoupper(preg_replace('/\s+/','',$raw));
+ return preg_match('/\A[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}\z/D',$iban)?$iban:'';
 }
 function mm_eur_enabled(): bool {
- return mm_config('MASSAGE_EUR_ENABLED')==='1' && mm_eur_iban()!=='' && mm_config('MASSAGE_EUR_FIO_CONFIGURED')==='1';
+ // Do not require an imaginary second EUR account or EUR Fio API token.
+ // Inbound EUR orders stay pending until accurately verified against Fio.
+ return mm_config('MASSAGE_EUR_ENABLED','1')==='1' && mm_eur_iban()!=='';
 }
 function mm_eur_bic(): string {
  $bic=strtoupper(trim(mm_config('MASSAGE_EUR_BIC','FIOBCZPPXXX')));
