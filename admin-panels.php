@@ -23,6 +23,24 @@ $dates=$db->prepare("SELECT o.id,o.client_id,o.buyer_name,o.kind,o.status,o.appo
 $dates->execute([$start->format('Y-m-d'),$next->format('Y-m-d'),$start->format('Y-m-d'),$next->format('Y-m-d')]);
 $byDay=[];
 foreach($dates->fetchAll() as $event){if($event['visit_date']!=='')$byDay[$event['visit_date']][]=$event;}
+$googleDays=[];$googleError='';
+if(mm_google_connected()){
+ try{
+  $zone=new DateTimeZone('Europe/Prague');
+  foreach(mm_google_busy_range($start,$next) as [$busyStart,$busyEnd]){
+   $time=(new DateTimeImmutable('@'.$busyStart))->setTimezone($zone);
+   $finish=(new DateTimeImmutable('@'.$busyEnd))->setTimezone($zone);
+   $counter=0;
+   while($time<$finish && $counter++<35){
+    $date=$time->format('Y-m-d');
+    if($date>=$next->format('Y-m-d'))break;
+    if($date>=$start->format('Y-m-d'))$googleDays[$date][]=$time->format('H:i').' · Google obsazeno';
+    $time=$time->modify('tomorrow')->setTime(0,0);
+   }
+  }
+ }catch(Throwable $e){error_log('MM Google admin month: '.get_class($e));$googleError='Obsazenost Google Kalendáře nelze právě načíst.';}
+}
+
 $clientSql="SELECT c.*,COUNT(o.id) AS order_count,
  COALESCE(SUM(CASE WHEN o.status='paid' AND o.currency='CZK' THEN o.amount_cents ELSE 0 END),0) AS paid_czk,
  COALESCE(SUM(CASE WHEN o.status='paid' AND o.currency='EUR' THEN o.amount_cents ELSE 0 END),0) AS paid_eur,
@@ -144,7 +162,9 @@ $upcoming=$db->query("SELECT id,client_id,buyer_name,focus,duration,kind,confirm
  <div class="crmtitle"><h2>📆 Kalendář masáží a schůzek</h2><span class="crmhint">Evropský čas · Praha</span></div>
  <div class="crmcalhead"><a href="admin.php?month=<?=h($monthPrev)?>#calendar">← Předchozí</a>
  <strong><?=h($start->format('m / Y'))?></strong><a href="admin.php?month=<?=h($monthNext)?>#calendar">Další →</a></div>
- <div class="crmcalwrap"><div class="crmcalendar">
+ <?php if(mm_google_connected()):?><p class="crmhint">🟢 Google Calendar API připojeno · <strong><?=h(MM_GOOGLE_OWNER)?></strong>. Zobrazuje jen obsazenost (nikoliv názvy osobních událostí).</p><?php endif;?>
+<?php if($googleError!==''):?><p class="notice error"><?=h($googleError)?></p><?php endif;?>
+<div class="crmcalwrap"><div class="crmcalendar">
  <?php foreach(['Po','Út','St','Čt','Pá','So','Ne'] as $day):?><div class="crmweekday"><?=$day?></div><?php endforeach;?>
  <?php for($pad=1;$pad<(int)$start->format('N');$pad++):?><div class="crmday crmday--empty"></div><?php endfor;?>
  <?php for($n=1;$n<=(int)$start->format('t');$n++):$date=$start->setDate((int)$start->format('Y'),(int)$start->format('m'),$n)->format('Y-m-d'); ?>
@@ -152,8 +172,9 @@ $upcoming=$db->query("SELECT id,client_id,buyer_name,focus,duration,kind,confirm
    <?php foreach($byDay[$date]??[] as $o):?><a class="crmevent <?=$o['appointment_status']==='confirmed'?'':'crmevent--pending'?>" href="#orders" title="<?=h($o['appointment_status']==='confirmed'?'Potvrzeno':'Předběžně')?>">
     <?=h($o['visit_time']?:'dle domluvy')?> · <?=h($o['buyer_name'])?> · <?=h($o['duration'])?> min
    </a><?php endforeach;?>
+   <?php foreach($googleDays[$date]??[] as $external):?><span class="crmevent" style="background:#e5e5f2;border-left-color:#7377b6" title="Obsazený úsek z Google Kalendáře (bez osobních údajů)">🔒 <?=h($external)?></span><?php endforeach;?>
   </div><?php endfor;?></div></div>
- <p class="crmhint">Zeleně jsou potvrzené termíny, béžově předběžné žádosti. Nové termíny potvrzuje správce; volné časy rezervací se ověřují proti interní databázi.</p>
+ <p class="crmhint">Zeleně jsou potvrzené termíny, béžově předběžné žádosti, fialově obsazenost Google Kalendáře. Po propojení se nové volné hodiny ověřují i přes Google Calendar FreeBusy.</p>
 </section>
 <section id="inquiries" class="crmpanel"><div class="crmtitle"><h2>✉️ Kontaktní formulář a zprávy</h2><span class="crmstatus"><?=$inboxNew?> nových</span></div>
  <p class="crmhint">Zprávy přicházejí z formuláře na webu; klient i správce dostávají samostatné grafické potvrzení e-mailem.</p>
