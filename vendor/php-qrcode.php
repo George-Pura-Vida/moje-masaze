@@ -102,6 +102,26 @@ class QRCode {
 		return $image;
 	}
 
+	/**
+	 * Pure-PHP SVG renderer for installations without GD.
+	 * Uses the encoder's complete QR matrix and includes the 4-module quiet zone.
+	 */
+	public function render_svg($scale = 6, $quiet = 4) {
+		$code = $this->dispatch_encode($this->data, $this->options);
+		$matrix = $code['b'];
+		$size = count($matrix);
+		$quiet = max(4, min(12, (int)$quiet));
+		$scale = max(2, min(16, (int)$scale));
+		$width = ($size + 2 * $quiet) * $scale;
+		$path = '';
+		foreach ($matrix as $y => $row) {
+			foreach ($row as $x => $on) {
+				if ($on) $path .= 'M'.($x+$quiet).' '.($y+$quiet).'h1v1h-1z';
+			}
+		}
+		return '<svg xmlns="http://www.w3.org/2000/svg" width="'.$width.'" height="'.$width.'" viewBox="0 0 '.($size+2*$quiet).' '.($size+2*$quiet).'" role="img" aria-label="QR kód" shape-rendering="crispEdges"><rect width="100%" height="100%" fill="#fff"/><path d="'.$path.'" fill="#21352b"/></svg>';
+	}
+
 	/* - - - - INTERNAL FUNCTIONS - - - - */
 
 	private function encode_and_calculate_size($data, $options) {
