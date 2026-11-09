@@ -11,5 +11,5 @@ DirectoryIndex index.php
 </FilesMatch>
 <IfModule mod_rewrite.c>
  RewriteEngine On
- RewriteRule ^(?:\.git|\.github|var|private|tests)/ - [F,L,NC]
+ RewriteRule ^(?:\.git|\.github|var|private|tests|cron)/ - [F,L,NC]
 </IfModule>
