@@ -84,4 +84,31 @@ check(str_contains($svg,'<svg')&&str_contains($svg,'<path'),'server generates en
 $key=mm_calendar_secret();
 check(preg_match('/\A[a-f0-9]{64}\z/D',$key)===1,'private calendar feed key created securely');
 
+
+check((int)mm_db()->query('SELECT COUNT(*) FROM clients')->fetchColumn()>=2,'CRM stores and deduplicates clients from massage orders');
+$clientID=mm_crm_save_client(['full_name'=>'Customer Demo','email'=>'customer-demo@example.org','phone'=>'+420 777 000 111','notes'=>'Repeat appointment']);
+$client=mm_db()->prepare('SELECT full_name,email,phone,notes FROM clients WHERE id=?');$client->execute([$clientID]);$clientRow=$client->fetch();
+check($clientRow['full_name']==='Customer Demo' && str_contains($clientRow['notes'],'Repeat'),'CRM owner can create and edit customer profiles');
+mm_crm_save_client(['client_id'=>$clientID,'full_name'=>'Customer Updated','email'=>'customer-demo@example.org','phone'=>'+420 777 000 111','notes'=>'Preferred afternoon']);
+$client->execute([$clientID]);check($client->fetch()['full_name']==='Customer Updated','CRM customer edit saved to private DB');
+$inquiry=mm_crm_add_inquiry(['name'=>'Test Contact','email'=>'contact@example.org','phone'=>'+420 777 000 222','subject'=>'Gift voucher','message'=>'Please send me an appointment date for a gift voucher.','website'=>'','terms'=>true,'csrf'=>$csrf],'192.0.2.90');
+$q=mm_db()->prepare('SELECT status FROM inquiries WHERE id=?');$q->execute([$inquiry]);
+check($q->fetchColumn()==='new','contact message safely stored in inbox');
+check((int)mm_db()->query("SELECT COUNT(*) FROM inquiry_email_queue WHERE status='pending'")->fetchColumn()===2,'client and administrator contact confirmation messages queued');
+mm_crm_inquiry_status($inquiry,'resolved');$q->execute([$inquiry]);check($q->fetchColumn()==='resolved','inbox message can be marked resolved');
+require_once dirname(__DIR__).'/admin-auth.php';
+$ownerPassword='ExampleTestPassphrase_2026_only';
+mm_admin_save_password($ownerPassword);
+check(password_verify($ownerPassword,mm_admin_hash()),'admin password stored only as a private password hash');
+$reset=mm_admin_generate_reset();
+check(mm_admin_reset_is_valid($reset),'single-use password reset token initially valid');
+$updatedPassword='AnotherSafePassword_2026';
+mm_admin_complete_reset($reset,$updatedPassword,$updatedPassword);
+check(!mm_admin_reset_is_valid($reset),'password reset token invalid after use');
+check(password_verify($updatedPassword,mm_admin_hash())&&!password_verify($ownerPassword,mm_admin_hash()),'password reset securely rotates the hash');
+$denied=false;
+try{mm_admin_complete_reset($reset,'ThirdSafePassword_2026','ThirdSafePassword_2026');}
+catch(InvalidArgumentException $e){$denied=true;}
+check($denied,'replay of used password reset denied');
+
 echo "All smoke tests passed.\n";
