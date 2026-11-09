@@ -80,7 +80,7 @@ function renderQr(o){
 form.addEventListener('submit',async e=>{
  e.preventDefault();if(!form.checkValidity()){form.reportValidity();notice(t('invalid'),true);return;}
  if(currency.value==='EUR'&&!quote?.eur_enabled){notice(t('eurOff'),true);return;}
- const data=Object.fromEntries(new FormData(form));data.csrf=$('meta[name="mm-csrf"]').content;data.lang=lang;data.terms=form.elements.terms.checked;
+ const data=Object.fromEntries(new FormData(form));data.csrf=$('meta[name="mm-csrf"]').content;data.lang=lang;data.terms=form.elements.terms.checked;data.expected_amount_cents=currency.value==='EUR'?quote?.eur_cents:priceCents();
  submit.disabled=true;notice(t('working'));
  try{
   const response=await fetch('order.php',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(data)});
