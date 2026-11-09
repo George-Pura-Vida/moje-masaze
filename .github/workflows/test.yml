@@ -16,6 +16,22 @@ jobs:
           find . -type f -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l
       - name: PHP order and pricing tests
         run: php tests/smoke.php
+      - name: Contact form HTTP request on a fresh database
+        run: |
+          private_dir=$(mktemp -d)
+          MASSAGE_PRIVATE_DIR="$private_dir" MASSAGE_EUR_ENABLED=0 php -d disable_functions=mail -S 127.0.0.1:8090 >"$private_dir/server.log" 2>&1 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+          url=http://127.0.0.1:8090
+          curl --retry 5 --retry-connrefused --fail --silent --show-error \
+            --cookie-jar "$private_dir/cookies" "$url/" -o "$private_dir/home.html"
+          csrf=$(sed -n 's/.*name="mm-csrf" content="\([0-9a-f]*\)".*/\1/p' "$private_dir/home.html")
+          test -n "$csrf"
+          response=$(curl --fail --silent --show-error --cookie "$private_dir/cookies" \
+            -H "Origin: $url" -H 'Content-Type: application/json' \
+            --data "{\"name\":\"Test Contact\",\"email\":\"contact@example.org\",\"message\":\"Synthetic contact test\",\"terms\":true,\"csrf\":\"$csrf\"}" \
+            "$url/contact-message.php")
+          printf '%s\n' "$response" | php -r 'exit((json_decode(stream_get_contents(STDIN), true)["ok"] ?? false) ? 0 : 1);'
       - name: JavaScript syntax
         run: |
           node --check app.js

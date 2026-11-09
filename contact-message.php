@@ -2,6 +2,7 @@
 declare(strict_types=1);
 ini_set('display_errors','0');
 require_once __DIR__.'/lib.php';
+require_once __DIR__.'/crm.php';
 header('Cache-Control: no-store');
 header('X-Content-Type-Options: nosniff');
 if(($_SERVER['REQUEST_METHOD']??'')!=='POST')mm_json(405,['error'=>'Použijte kontaktní formulář.']);
