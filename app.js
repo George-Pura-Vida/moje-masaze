@@ -29,6 +29,7 @@ function renderLang(){
  });
  form.querySelectorAll('[data-ph]').forEach(el=>el.placeholder=t(el.dataset.ph));
  form.querySelector('.currency-choice label>span').textContent=t('currencyLabel');
+ setSlotNotice($('#date').value?'ready':'initial');
  document.title=({cs:'Moje masáže',sk:'Moje masáže',en:'My Massages',es:'Mis masajes',zh:'我的按摩'})[lang]+' · Dotyk & klid';
  renderPrice();
 }
@@ -43,7 +44,7 @@ menu.addEventListener('click',e=>{if(e.target.closest('a')){menu.classList.remov
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){menu.classList.remove('open');toggle.setAttribute('aria-expanded','false');}});
 document.querySelectorAll('[data-select-duration]').forEach(a=>a.addEventListener('click',()=>{duration.value=a.dataset.selectDuration;refresh();}));
 document.querySelectorAll('[data-select-gift]').forEach(a=>a.addEventListener('click',()=>{kind.value='gift';updateKind();pay.hidden=true;}));
-function updateKind(){const gift=kind.value==='gift';$('#recipientBox').hidden=!gift;$('#dateBox').hidden=gift;$('#timeBox').hidden=gift;$('#date').disabled=gift;$('#time').disabled=gift;}
+function updateKind(){const gift=kind.value==='gift';$('#recipientBox').hidden=!gift;$('#dateBox').hidden=false;$('#timeBox').hidden=false;$('#date').disabled=false;$('#time').disabled=false;}
 function renderPrice(){
  const czk=priceCents(),n=Number(quantity.value),full=(duration.value==='180'?300000:200000)*n;
  if(currency.value==='EUR'){
@@ -65,6 +66,42 @@ async function refresh(){
 }
 for(const el of [duration,quantity,currency])el.addEventListener('change',refresh);
 kind.addEventListener('change',()=>{updateKind();pay.hidden=true;});
+const slotsMessages={
+ cs:{initial:'Datum a hodinu můžete zvolit před zaškrtnutím souhlasu. Bez konkrétní hodiny zůstane termín dle domluvy.',loading:'Ověřuji volné hodiny…',ready:'Volné hodiny jsou v nabídce. Obsazené časy nelze vybrat; termín potvrzuje masér.',unavailable:'Pro tento den už nejsou volné hodiny. Vyberte jiné datum nebo Dle domluvy.',error:'Dostupnost nyní nelze ověřit. Zvolte jiný den nebo Dle domluvy.'},
+ sk:{initial:'Dátum aj hodinu môžete vybrať pred súhlasom. Bez hodiny ostáva termín na dohodu.',loading:'Kontrolujem voľné hodiny…',ready:'Dostupné hodiny sú v zozname. Termín potvrdí masér.',unavailable:'Na tento deň už nie je voľný čas.',error:'Dostupnosť teraz nie je možné overiť.'},
+ en:{initial:'Choose date and time before giving consent. Leave the time blank to arrange it later.',loading:'Checking available times…',ready:'Available times are shown. Your therapist will confirm the appointment.',unavailable:'No available slots for this date.',error:'Availability is temporarily unavailable.'},
+ es:{initial:'Selecciona fecha y hora antes de aceptar las condiciones. Puedes dejar la hora para acordarla.',loading:'Comprobando horarios disponibles…',ready:'Horarios disponibles. El masajista confirmará la cita.',unavailable:'No hay horas disponibles en esta fecha.',error:'No se puede comprobar la disponibilidad.'},
+ zh:{initial:'勾选同意前即可选择日期和时间，也可以稍后商定。',loading:'正在查询空闲时段…',ready:'可选时段已显示，最终时间需由按摩师确认。',unavailable:'当天没有可预订时间。',error:'暂时无法查询可用时间。'}
+};
+let slotsEpoch=0;
+function setSlotNotice(message,type=''){const el=$('#slotNotice');if(!el)return;el.textContent=(slotsMessages[lang]||slotsMessages.cs)[message];el.classList.toggle('warning',type==='warning');}
+async function refreshSlots(){
+ const selected=$('#date').value,select=$('#time'),epoch=++slotsEpoch;
+ if(!selected){for(const opt of select.options)opt.disabled=false;setSlotNotice('initial');return;}
+ setSlotNotice('loading');
+ for(const opt of select.options)if(opt.value!=='')opt.disabled=true;
+ try{
+  const res=await fetch('slots.php?date='+encodeURIComponent(selected)+'&duration='+encodeURIComponent(duration.value),{cache:'no-store'});
+  if(!res.ok)throw Error('slots');
+  const data=await res.json();if(epoch!==slotsEpoch)return;
+  const slots=new Map(data.slots.map(x=>[x.time,Boolean(x.available)]));
+  let count=0;
+  for(const opt of select.options){
+   if(opt.value==='')continue;
+   const free=slots.get(opt.value)===true;opt.disabled=!free;
+   opt.textContent=opt.value+(free?' ✓':' · obsazeno');if(free)count++;
+  }
+  if(select.selectedOptions[0]?.disabled)select.value='';
+  setSlotNotice(count?'ready':'unavailable',count?'':'warning');
+ }catch(err){
+  if(epoch!==slotsEpoch)return;
+  for(const opt of select.options)if(opt.value!=='')opt.disabled=true;
+  select.value='';setSlotNotice('error','warning');
+ }
+}
+$('#date').addEventListener('change',refreshSlots);
+duration.addEventListener('change',refreshSlots);
+
 const min=new Date();min.setDate(min.getDate()+1);
 $('#date').min=[min.getFullYear(),String(min.getMonth()+1).padStart(2,'0'),String(min.getDate()).padStart(2,'0')].join('-');
 function notice(msg,error=false){formStatus.textContent=msg;formStatus.classList.toggle('error',error);}
@@ -111,4 +148,4 @@ $('#checkPay').addEventListener('click',async()=>{
   }
  }catch{paymentFeedback.textContent=t('checkFail');}
 });
-updateKind();renderLang();refresh();
+updateKind();renderLang();refresh();refreshSlots();
