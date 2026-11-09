@@ -115,3 +115,19 @@ Postup:
 Bezpečnost: Skript kontroluje pouze origin George-Pura-Vida/moje-masaze a větev main, neprovádí force ani reset, odmítá přepsat ručně upravené sledované soubory a nasazuje jen přesně ten commit, který prošel GitHub Actions workflow test.yml. Lokální bankovní tokeny, SQLite a hash hesla se musí ukládat mimo veřejnou složku. Webové volání /cron/ je zakázáno přes .htaccess.
 
 Tento cron je oddělený od bankovního Fio cronu. Oba mají vlastní úlohu. Pokud WebKitty cron nepovoluje Bash/Git nebo dokumentový kořen není Git checkout, skript bezpečně skončí chybou a bude potřeba jiné řešení.
+
+
+## Rezervační kalendář a grafické dárkové poukazy (11/2026)
+
+- Ve formuláři lze vybírat datum a hodinu ještě před zaškrtnutím souhlasu. Datum a čas jsou dostupné také pro dárkové poukazy.
+- Endpoint slots.php zobrazuje volné časy podle interní databáze rezervací a blokací. Standardní plánované hodiny jsou 09:00–20:00 v časovém pásmu Europe/Prague; mezi masážemi je 30minutová rezerva.
+- Neuhrazená rezervace drží vybraný slot maximálně 24 hodin; potvrzené nebo uhrazené rezervace zůstávají zablokované až do dokončení či zrušení.
+- Zápis nového požadavku a kontrola obsazenosti probíhá v jedné SQLite zapisovací transakci; souběžné objednávky stejného termínu nejsou přijímány.
+- Administrace admin.php umožňuje vložit nebo zrušit časové blokace, schválit přesný termín, aktualizovat termín již zaplaceného poukazu a odeslat aktualizovaný krásný grafický poukaz.
+- calendar-feed.php nabízí tajnou iCalendar URL pro odběr potvrzených masáží v Google Kalendáři. Odkaz se ukáže až po přihlášení do administrace. Je to JEDNOSMĚRNÉ napojení; externí události vašeho osobního Google Kalendáře zatím neovlivňují výběr hodin na webu a změny Google může přebírat se zpožděním.
+- Po potvrzení bankovní platby systém odešle dárkový poukaz přímo v grafickém HTML e-mailu klientovi: fotografie, jméno obdarovaného, služba, počet masáží, domluvený / preferovaný termín, hodina, identifikační číslo a vstupní QR kód.
+- E-mail obsahuje QR jako vložený PNG obrázek, pokud má hosting PHP GD. Bez GD funguje bezpečný lokální SVG endpoint a tisková stránka; vložené e-mailové obrázky může poštovní klient blokovat.
+- voucher.php je tisknutelný poukaz A4. Vstupní QR vede na checkin.php, kde se poukaz ověřuje a uplatňuje pouze po přihlášení správce. Uplatnění je omezeno na zakoupený počet masáží a serverový bankovní stav paid.
+- QR je vytvářen lokálně v PHP pomocí MIT knihovny vendor/php-qrcode.php, bez externího QR API a bez předávání klientských tokenů třetí straně.
+- Pokud datum není domluveno, poukaz správně uvádí Termín dle individuální domluvy; preferovaný termín není označen za potvrzený.
+- Pro profesionální předávání voucherů doporučujeme ověřit skutečné doručování obou e-mailů a tisk QR v Chrome, Safari a mobilních bankovních aplikacích. Žádná přijatá platba nebyla simulována jako zaplacená.
