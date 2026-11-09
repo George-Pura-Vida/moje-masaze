@@ -85,7 +85,7 @@ $key=mm_calendar_secret();
 check(preg_match('/\A[a-f0-9]{64}\z/D',$key)===1,'private calendar feed key created securely');
 
 
-check((int)mm_db()->query('SELECT COUNT(*) FROM clients')->fetchColumn()>=2,'CRM stores and deduplicates clients from massage orders');
+check((int)mm_db()->query('SELECT COUNT(*) FROM clients')->fetchColumn()===1,'CRM deduplicates repeat massage customers by email');
 $clientID=mm_crm_save_client(['full_name'=>'Customer Demo','email'=>'customer-demo@example.org','phone'=>'+420 777 000 111','notes'=>'Repeat appointment']);
 $client=mm_db()->prepare('SELECT full_name,email,phone,notes FROM clients WHERE id=?');$client->execute([$clientID]);$clientRow=$client->fetch();
 check($clientRow['full_name']==='Customer Demo' && str_contains($clientRow['notes'],'Repeat'),'CRM owner can create and edit customer profiles');
