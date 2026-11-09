@@ -38,4 +38,20 @@ check((int)mm_db()->query('SELECT COUNT(*) FROM email_queue')->fetchColumn()===2
 check(str_contains(mm_mail_template($row,'new_client')['html'],'DOTYK'),'branded HTML email');
 try{mm_create_order([...$input,'csrf'=>'invalid'],'192.0.2.2');throw new RuntimeException('FAIL: invalid CSRF accepted');}catch(InvalidArgumentException $e){check(true,'invalid CSRF rejected');}
 try{mm_create_order([...$input,'currency'=>'EUR'],'192.0.2.3');throw new RuntimeException('FAIL: unconfigured EUR order accepted');}catch(InvalidArgumentException $e){check(true,'unconfigured EUR order rejected');}
+$date=(new DateTimeImmutable('+3 days',new DateTimeZone('Europe/Prague')))->format('Y-m-d');
+$confirmed=mm_admin_update($order['id'],'confirm',['confirmed_date'=>$date,'confirmed_time'=>'10:00']);
+check($confirmed['appointment_status']==='confirmed'&&$confirmed['confirmed_date']===$date,'admin can confirm appointment without changing bank status');
+check($confirmed['status']==='pending','admin confirmation does not falsely mark bank transfer paid');
+$done=mm_admin_update($order['id'],'complete',[]);
+check($done['appointment_status']==='completed','admin can complete a session');
+$giftInput=[...$input,'kind'=>'gift','recipient'=>'Gift Person','count'=>'3'];
+$gift=mm_create_order($giftInput,'192.0.2.4');
+try{mm_admin_update($gift['id'],'redeem',[]);throw new RuntimeException('FAIL: unpaid gift redeemed');}catch(InvalidArgumentException $e){check(true,'unpaid voucher cannot be redeemed');}
+mm_db()->prepare("UPDATE orders SET status='paid' WHERE id=?")->execute([$gift['id']]);
+for($i=1;$i<=3;$i++){
+ $redeemed=mm_admin_update($gift['id'],'redeem',[]);
+ check((int)$redeemed['redeemed_count']===$i,'gift redemption count '.$i);
+}
+try{mm_admin_update($gift['id'],'redeem',[]);throw new RuntimeException('FAIL: overredeemed gift');}catch(InvalidArgumentException $e){check(true,'paid gift cannot be redeemed beyond purchased count');}
+
 echo "All smoke tests passed.\n";
