@@ -131,10 +131,10 @@ function h(mixed $s): string {return mm_escape($s);}
 <?php endif;?></section>
 <?php else:?>
 <section class="login"><h2>Přihlášení správce</h2><p>Vstup pouze pro provozovatele. Heslo se porovnává bezpečně na serveru; ukládá se pouze jeho hash.</p>
-<?php if(get_hash()===''):?><p class="notice error">Přihlášení není aktivované. Nastavte na serveru <code>MASSAGE_ADMIN_PASSWORD_HASH</code> nebo soukromý soubor <code>admin-hash.txt</code>.</p><?php endif;?>
+<?php if(get_hash()===''):?><p class="notice">První přihlášení ještě není aktivované. Níže otevřete <strong>Aktivace a zapomenuté heslo</strong>; ověřovací odkaz přijde pouze na adresu administrátora. Na stránce odkazu si nastavíte své heslo. Heslo se bezpečně uloží mimo veřejný web.</p><?php endif;?>
 <form method="post"><input type="hidden" name="csrf" value="<?=h(mm_csrf())?>"><input type="hidden" name="action" value="login"><label>Administrátorský e-mail<input type="email" name="email" value="jgjanousek@gmail.com" autocomplete="username" required></label><label style="margin-top:12px">Heslo administrátora<input type="password" name="password" required autocomplete="current-password"></label><button type="submit">Přihlásit se</button></form>
-<details style="margin-top:20px;border-top:1px solid #e4d9c9;padding-top:16px"><summary style="cursor:pointer;font-weight:700;color:#48654e">Zapomenuté heslo? Obnovit e-mailem</summary>
-<p style="font-size:.86rem">Na ověřenou adresu administrátora pošleme jednorázový odkaz platný 30 minut.</p>
+<details style="margin-top:20px;border-top:1px solid #e4d9c9;padding-top:16px"><summary style="cursor:pointer;font-weight:700;color:#48654e">Aktivace účtu / zapomenuté heslo</summary>
+<p style="font-size:.86rem">Na adresu administrátora zašleme jednorázový odkaz pro první nastavení nebo obnovu hesla. Platí 30 minut; formulář vyžaduje funkční odesílání e-mailů na WebKitty.</p>
 <form method="post"><input type="hidden" name="csrf" value="<?=h(mm_csrf())?>"><input type="hidden" name="action" value="request_reset">
 <label>Administrátorský e-mail<input type="email" name="email" value="jgjanousek@gmail.com" required autocomplete="username"></label>
 <button type="submit">Poslat odkaz pro obnovu</button></form></details></section>
