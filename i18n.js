@@ -14,7 +14,8 @@ gifts:'giftEyebrow giftTitle giftText giftButton',
 bookingOne:'bookEyebrow bookTitle bookLead choose orderType typeBooking typeGift massageFocus focusHolistic focusSensual focusBack focusSport focusHead focusStones focusTowels focusTouch duration duration60 duration180 count count1 count2 count3 totalPrice',
 bookingTwo:'contactDetails name email phone recipient prefDate prefTime timeAny note noMedical agreeText privacyLink submit sideEyebrow sideTitle sideText sideOne sideTwo sideThree',
 payment:'paymentEyebrow paymentHeading paymentLead payAmount payAccount payVs payStatus pending copy check qrNote',
-contact:'contactEyebrow contactTitle contactDesc footerPrivacy footerTop'
+contact:'contactEyebrow contactTitle contactDesc footerPrivacy footerTop',
+currency:'currencyLabel',
 };
 export const translations={cs:{}};
 for(const [lang,src] of Object.entries({sk,en,es,zh})){
