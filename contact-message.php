@@ -14,7 +14,8 @@ try{
  $payload=json_decode($raw,true,24,JSON_THROW_ON_ERROR);
  if(!is_array($payload))throw new InvalidArgumentException('Neplatná zpráva.');
  $id=mm_crm_add_inquiry($payload,(string)($_SERVER['REMOTE_ADDR']??'unknown'));
- mm_json(201,['ok'=>true,'message'=>'Zpráva je uložená. Potvrzení odešleme e-mailem.']);
+ try{mm_crm_dispatch_inquiries(8);}catch(Throwable $e){error_log('MM contact mail queue: '.get_class($e));}
+ mm_json(201,['ok'=>true,'message'=>'Zpráva je uložená. Potvrzení odesíláme e-mailem.']);
 }catch(InvalidArgumentException $e){mm_json(422,['error'=>$e->getMessage()]);}
 catch(RuntimeException $e){mm_json(429,['error'=>'Příliš mnoho zpráv. Zkuste to později.']);}
 catch(Throwable $e){error_log('MM inquiry: '.get_class($e));mm_json(503,['error'=>'Zprávu nelze právě uložit. Zkuste to později.']);}
