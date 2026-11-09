@@ -74,12 +74,9 @@ function mm_google_api(string $method,string $path,?array $body=null): array {
  $headers=['Authorization: Bearer '.$token,'Accept: application/json','Content-Type: application/json'];
  return mm_google_http($method,'https://www.googleapis.com'.$path,$headers,$body===null?null:json_encode($body,JSON_THROW_ON_ERROR));
 }
-function mm_google_busy(string $date): array {
+function mm_google_busy_range(DateTimeImmutable $start,DateTimeImmutable $end): array {
  if(!mm_google_connected())return [];
- $tz=new DateTimeZone('Europe/Prague');
- $start=new DateTimeImmutable($date.' 00:00',$tz);
- if($start->format('Y-m-d')!==$date)throw new InvalidArgumentException('Invalid Google date.');
- $end=$start->modify('+1 day');
+ if($start>=$end)throw new InvalidArgumentException('Invalid Google date range.');
  $calendar=mm_google_calendar_id();
  $r=mm_google_api('POST','/calendar/v3/freeBusy',[
   'timeMin'=>$start->format(DateTimeInterface::RFC3339),
@@ -89,7 +86,7 @@ function mm_google_busy(string $date): array {
  ]);
  if($r['status']!==200)throw new RuntimeException('Google Calendar unavailable (HTTP '.$r['status'].').');
  $record=$r['data']['calendars'][$calendar]??null;
- if(!is_array($record)||isset($record['errors'])&&!empty($record['errors']))throw new RuntimeException('Google Calendar free/busy permission or calendar error.');
+ if(!is_array($record)||(isset($record['errors'])&&!empty($record['errors'])))throw new RuntimeException('Google Calendar free/busy permission or calendar error.');
  $busy=[];
  foreach($record['busy']??[] as $b){
   if(!isset($b['start'],$b['end']))continue;
@@ -98,6 +95,13 @@ function mm_google_busy(string $date): array {
   if($e>$s)$busy[]=[$s,$e];
  }
  return $busy;
+}
+function mm_google_busy(string $date): array {
+ if(!mm_google_connected())return [];
+ $tz=new DateTimeZone('Europe/Prague');
+ $start=new DateTimeImmutable($date.' 00:00',$tz);
+ if($start->format('Y-m-d')!==$date)throw new InvalidArgumentException('Invalid Google date.');
+ return mm_google_busy_range($start,$start->modify('+1 day'));
 }
 function mm_google_overlaps(array $busy,int $start,int $end): bool {
  foreach($busy as $b){if($start<(int)$b[1]&&$end>(int)$b[0])return true;}
@@ -128,7 +132,7 @@ function mm_google_sync_order(array $o): string {
  $description='Moje masáže · '.(MM_FOCUS[$o['focus']]??$o['focus'])."\n".
    'Klient: '.$o['buyer_name']."\nEmail: ".$o['email']."\nTelefon: ".$o['phone']."\nVS: ".$o['vs']."\nPlatba: ".($o['status']==='paid'?'uhrazeno':'čeká na úhradu');
  $event=[
-  'summary'=>mb_substr($summary,0,160),
+  'summary'=>function_exists('mb_substr')?mb_substr($summary,0,160):substr($summary,0,160),
   'description'=>$description,
   'start'=>['dateTime'=>$start->format(DateTimeInterface::RFC3339),'timeZone'=>'Europe/Prague'],
   'end'=>['dateTime'=>$end->format(DateTimeInterface::RFC3339),'timeZone'=>'Europe/Prague'],
