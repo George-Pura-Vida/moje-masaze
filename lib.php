@@ -193,7 +193,7 @@ function mm_slot_interval(string $date,string $time,int $duration): array {
  $zone=new DateTimeZone('Europe/Prague');
  $day=DateTimeImmutable::createFromFormat('!Y-m-d',$date,$zone);
  if(!$day||$day->format('Y-m-d')!==$date)throw new InvalidArgumentException('Neplatné datum rezervace.');
- if(!preg_match('/\A(?:0[9]|1[0-9]):00\z/D',$time))throw new InvalidArgumentException('Neplatná hodina.');
+ if(!preg_match('/\A(?:0[9]|1[0-9]):(?:00|15|30|45)\z/D',$time))throw new InvalidArgumentException('Neplatná hodina.');
  if(!in_array($duration,[60,180],true))throw new InvalidArgumentException('Neplatná délka masáže.');
  $start=DateTimeImmutable::createFromFormat('!Y-m-d H:i',$date.' '.$time,$zone);
  if(!$start||$start->format('Y-m-d H:i')!==$date.' '.$time)throw new InvalidArgumentException('Neplatný čas.');
@@ -510,29 +510,41 @@ function mm_admin_update(string $id,string $action,array $data): array {
  if(!preg_match('/\A[a-f0-9]{24}\z/D',$id))throw new InvalidArgumentException('Neplatné ID.');
  $q=$db->prepare('SELECT * FROM orders WHERE id=?');$q->execute([$id]);$o=$q->fetch();
  if(!$o)throw new InvalidArgumentException('Objednávka nenalezena.');
+ $transaction=in_array($action,['confirm','schedule_gift'],true);
+ if($transaction)$db->exec('BEGIN IMMEDIATE');
+ try {
  if($action==='redeem'){
   if($o['kind']!=='gift'||$o['status']!=='paid')throw new InvalidArgumentException('Poukaz musí být uhrazený.');
   $sql="UPDATE orders SET redeemed_count=redeemed_count+1,redeemed_at=? WHERE id=? AND kind='gift' AND status='paid' AND redeemed_count<quantity";
   $update=$db->prepare($sql);$update->execute([time(),$id]);
   if($update->rowCount()!==1)throw new InvalidArgumentException('Poukaz je již plně využit.');
- }elseif($action==='confirm'){
-  if($o['kind']!=='booking')throw new InvalidArgumentException('Pro poukaz nejprve domluvte termín.');
+ }elseif($action==='confirm'||$action==='schedule_gift'){
+  $expectedKind=$action==='schedule_gift'?'gift':'booking';
+  if($o['kind']!==$expectedKind)throw new InvalidArgumentException('Nevhodný typ rezervace.');
+  if($expectedKind==='gift'&&$o['status']!=='paid')throw new InvalidArgumentException('Termín poukazu lze potvrdit až po uhrazení.');
   $date=mm_text($data['confirmed_date']??'',10,true);
   $time=mm_text($data['confirmed_time']??'',5,true);
   $dateObj=DateTimeImmutable::createFromFormat('!Y-m-d',$date,new DateTimeZone('Europe/Prague'));
   if(!$dateObj||$dateObj->format('Y-m-d')!==$date||$dateObj<(new DateTimeImmutable('today',new DateTimeZone('Europe/Prague'))))throw new InvalidArgumentException('Datum musí být dnes nebo později.');
   if(!preg_match('/\A(?:0[7-9]|1[0-9]|2[01]):(?:00|15|30|45)\z/D',$time))throw new InvalidArgumentException('Neplatný čas.');
-  $update=$db->prepare("UPDATE orders SET appointment_status='confirmed',confirmed_date=?,confirmed_time=? WHERE id=? AND kind='booking'");
-  $update->execute([$date,$time,$id]);
+  if(!mm_slot_is_free($date,$time,(int)$o['duration'],$id))throw new InvalidArgumentException('Termín koliduje s jinou masáží nebo blokací kalendáře.');
+  $update=$db->prepare("UPDATE orders SET appointment_status='confirmed',confirmed_date=?,confirmed_time=? WHERE id=? AND kind=?");
+  $update->execute([$date,$time,$id,$expectedKind]);
  }elseif($action==='cancel'||$action==='complete'){
   if($o['kind']!=='booking')throw new InvalidArgumentException('Nevhodná akce.');
   $update=$db->prepare('UPDATE orders SET appointment_status=? WHERE id=?');
   $update->execute([$action==='cancel'?'cancelled':'completed',$id]);
  }else{throw new InvalidArgumentException('Neplatná akce.');}
+ if($transaction)$db->commit();
+ }catch(Throwable $e){if($transaction&&$db->inTransaction())$db->rollBack();throw $e;}
  $q=$db->prepare('SELECT * FROM orders WHERE id=?');$q->execute([$id]);return $q->fetch();
 }
 function mm_appointment_notice(array $o,string $action): bool {
- if(!in_array($action,['confirm','cancel'],true))return true;
+ if(!in_array($action,['confirm','schedule_gift','cancel'],true))return true;
+ if($action==='schedule_gift'&&$o['kind']==='gift'&&$o['status']==='paid'){
+  require_once __DIR__.'/coupon.php';
+  return mm_send($o['email'],mm_mail_template($o,'paid_client'));
+ }
  $confirmed=$action==='confirm';
  $heading=$confirmed?'Potvrzení termínu masáže':'Zrušení termínu masáže';
  $details=$confirmed
