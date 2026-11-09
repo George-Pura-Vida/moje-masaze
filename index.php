@@ -3,6 +3,7 @@ declare(strict_types=1);
 session_start();
 if (empty($_SESSION['mm_csrf'])) $_SESSION['mm_csrf']=bin2hex(random_bytes(24));
 header('Content-Type: text/html; charset=utf-8');
+header('Cache-Control: no-cache, must-revalidate');
 header('X-Content-Type-Options: nosniff');
 header('Referrer-Policy: strict-origin-when-cross-origin');
 header('X-Frame-Options: SAMEORIGIN');
@@ -30,8 +31,8 @@ header('X-Frame-Options: SAMEORIGIN');
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261109-crm-v3">
-<script type="module" src="app.js?v=20261109-crm-v3"></script>
+<link rel="stylesheet" href="style.css?v=<?= (int)filemtime(__DIR__.'/style.css') ?>">
+<script type="module" src="app.js?v=<?= (int)filemtime(__DIR__.'/app.js') ?>"></script>
 </head>
 <body>
 <a class="skip" href="#main">Přejít na obsah</a>
