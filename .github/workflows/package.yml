@@ -1,0 +1,38 @@
+name: WebKitty ZIP
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify PHP syntax
+        run: find . -type f -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l
+      - name: Package public website into ZIP root
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p package
+          cp -a index.php style.css app.js i18n.js i18n-cs.js i18n-sk.js i18n-en.js i18n-es.js i18n-zh.js lib.php order.php pricing.php status.php voucher.php payment.php admin.php privacy.php favicon.svg .htaccess package/ 2>/dev/null || true
+          for required in index.php style.css app.js i18n.js lib.php order.php payment.php admin.php privacy.php .htaccess; do
+            test -f "package/$required"
+          done
+          cp -a vendor package/
+          mkdir -p package/cron
+          cp cron/fio-sync.php cron/status.php cron/auto-deploy.sh package/cron/
+          cd package
+          zip -q -r ../moje-masaze-webkitty.zip .
+          cd ..
+          unzip -Z1 moje-masaze-webkitty.zip | grep -Fx 'index.php'
+          unzip -Z1 moje-masaze-webkitty.zip | grep -Fx '.htaccess'
+      - name: Upload ready-to-extract archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: moje-masaze-webkitty
+          path: moje-masaze-webkitty.zip
+          retention-days: 30
+          if-no-files-found: error
