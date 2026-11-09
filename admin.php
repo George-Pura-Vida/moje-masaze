@@ -5,41 +5,55 @@ ini_set('session.use_strict_mode','1');
 session_set_cookie_params(['lifetime'=>0,'path'=>'/','secure'=>(!empty($_SERVER['HTTPS'])&&$_SERVER['HTTPS']!=='off'),'httponly'=>true,'samesite'=>'Lax']);
 session_start();
 require_once __DIR__.'/lib.php';
+require_once __DIR__.'/admin-auth.php';
 header('Content-Type: text/html; charset=utf-8');
 header('Cache-Control: private, no-store, max-age=0');
 header('X-Robots-Tag: noindex, nofollow, noarchive');
 header('X-Frame-Options: DENY');
 header('Referrer-Policy: no-referrer');
-function get_hash(): string {
- $env=getenv('MASSAGE_ADMIN_PASSWORD_HASH');if(is_string($env)&&$env!=='')return $env;
- try{
-  $file=mm_private_dir().'/admin-hash.txt';
-  if(!is_file($file)||is_link($file)||!is_readable($file))return '';
-  $perm=@fileperms($file);if($perm===false||($perm&0077)!==0)return '';
-  return trim((string)file_get_contents($file));
- }catch(Throwable $e){return '';}
-}
+function get_hash(): string {return mm_admin_hash();}
 function redirect_admin(string $msg=''): never {
  header('Location: admin.php'.($msg?'?notice='.rawurlencode($msg):''),true,303);exit;
 }
-$alert='';$authenticated=($_SESSION['mm_admin_auth']??false)===true;
+$alert='';$authenticated=mm_admin_is_logged_in();
 if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
  $csrf=(string)($_POST['csrf']??'');
  if(!hash_equals(mm_csrf(),$csrf)){http_response_code(403);$alert='Neplatný bezpečnostní token. Obnovte stránku.';}
  elseif(($_POST['action']??'')==='logout'){
-  unset($_SESSION['mm_admin_auth']);session_regenerate_id(true);redirect_admin('Odhlášení proběhlo.');
+  unset($_SESSION['mm_admin_auth'],$_SESSION['mm_admin_version']);session_regenerate_id(true);redirect_admin('Odhlášení proběhlo.');
+ }elseif(($_POST['action']??'')==='request_reset'){
+  try{mm_admin_request_reset($_POST['email']??'',(string)($_SERVER['REMOTE_ADDR']??'unknown'));}
+  catch(Throwable $e){error_log('MM password reset mail: '.get_class($e));}
+  redirect_admin('Pokud je účet aktivní, odešleme odkaz pro obnovu hesla na administrátorský e-mail.');
+ }elseif(($_POST['action']??'')==='reset_password'){
+  try{
+   mm_admin_complete_reset((string)($_POST['reset_token']??''),(string)($_POST['new_password']??''),(string)($_POST['new_password_again']??''));
+   unset($_SESSION['mm_admin_auth'],$_SESSION['mm_admin_version']);session_regenerate_id(true);
+   redirect_admin('Heslo bylo úspěšně změněno. Nyní se přihlaste.');
+  }catch(InvalidArgumentException $e){$alert=$e->getMessage();http_response_code(422);}
+  catch(Throwable $e){error_log('MM password reset: '.get_class($e));$alert='Obnovu hesla se nepodařilo dokončit. Kontaktujte správu hostingu.';http_response_code(503);}
  }elseif(($_POST['action']??'')==='login'){
   try{
    mm_rate_limit('admin:'.($_SERVER['REMOTE_ADDR']??'unknown'));
    $hash=get_hash();
    if(hash_equals('jgjanousek@gmail.com',strtolower(trim((string)($_POST['email']??''))))&&$hash!==''&&password_verify((string)($_POST['password']??''),$hash)){
-    session_regenerate_id(true);$_SESSION['mm_admin_auth']=true;redirect_admin('Přihlášení úspěšné.');
+    session_regenerate_id(true);$_SESSION['mm_admin_auth']=true;$_SESSION['mm_admin_version']=mm_admin_session_version();redirect_admin('Přihlášení úspěšné.');
    }
    $alert='Neplatné heslo nebo není nastavené přihlášení.';http_response_code(401);
   }catch(Throwable $e){$alert='Příliš mnoho pokusů, zkuste to později.';http_response_code(429);}
  }elseif($authenticated){
   try{
    $action=(string)($_POST['action']??'');
+   if($action==='change_password'){
+    $current=(string)($_POST['current_password']??'');
+    $hash=mm_admin_hash();
+    if($hash===''||!password_verify($current,$hash))throw new InvalidArgumentException('Současné heslo není správné.');
+    $next=mm_admin_valid_new_password($_POST['new_password']??'',$_POST['new_password_again']??'');
+    if(password_verify($next,$hash))throw new InvalidArgumentException('Nové heslo se musí lišit od současného.');
+    mm_admin_save_password($next);
+    session_regenerate_id(true);$_SESSION['mm_admin_auth']=true;$_SESSION['mm_admin_version']=mm_admin_session_version();
+    redirect_admin('Heslo administrátora bylo bezpečně změněno.');
+   }
    if($action==='save_client'){$cid=mm_crm_save_client($_POST);redirect_admin('Klientský profil byl uložen.');}
    if($action==='archive_client'||$action==='restore_client'){mm_crm_archive_client((string)($_POST['client_id']??''),$action==='archive_client');redirect_admin('Stav klientského profilu byl změněn.');}
    if($action==='inquiry_status'){mm_crm_inquiry_status((string)($_POST['inquiry_id']??''),(string)($_POST['status']??''));redirect_admin('Zpráva byla zpracována.');}
@@ -52,7 +66,7 @@ if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
   }catch(Throwable $e){$alert=$e instanceof InvalidArgumentException?$e->getMessage():'Změnu se nepodařilo uložit.';http_response_code(422);}
  }
 }
-$authenticated=($_SESSION['mm_admin_auth']??false)===true;
+$authenticated=mm_admin_is_logged_in();
 if($authenticated && ($_GET['export']??'')==='clients'){
  try{
   $db=mm_db();
@@ -95,9 +109,28 @@ function h(mixed $s): string {return mm_escape($s);}
 <?php if($notice!==''):?><div class="notice"><?=h($notice)?></div><?php endif;?>
 <?php if($alert!==''):?><div class="notice error"><?=h($alert)?></div><?php endif;?>
 <?php if(!$authenticated):?>
+<?php $resetToken=$_GET['reset']??null;$resetRequested=is_string($resetToken);$resetValid=$resetRequested && mm_admin_reset_is_valid($resetToken); ?>
+<?php if($resetRequested):?>
+<section class="login"><h2>🔐 Obnovení hesla</h2>
+<?php if(!$resetValid):?><p class="notice error">Odkaz již vypršel nebo byl použit. Vyžádejte si nový odkaz z přihlašovací stránky.</p><p><a href="admin.php">← Přihlášení</a></p>
+<?php else:?>
+<p>Pro administrátorský účet <strong>jgjanousek@gmail.com</strong> nastavte nové heslo. Odkaz je jednorázový.</p>
+<form method="post" autocomplete="off"><input type="hidden" name="csrf" value="<?=h(mm_csrf())?>"><input type="hidden" name="action" value="reset_password">
+<input type="hidden" name="reset_token" value="<?=h($resetToken)?>">
+<label>Nové heslo (alespoň 12 znaků)<input type="password" name="new_password" required minlength="12" maxlength="128" autocomplete="new-password"></label>
+<label style="margin-top:12px">Nové heslo znovu<input type="password" name="new_password_again" required minlength="12" maxlength="128" autocomplete="new-password"></label>
+<button type="submit">Nastavit nové heslo</button></form>
+<?php endif;?></section>
+<?php else:?>
 <section class="login"><h2>Přihlášení správce</h2><p>Vstup pouze pro provozovatele. Heslo se porovnává bezpečně na serveru; ukládá se pouze jeho hash.</p>
 <?php if(get_hash()===''):?><p class="notice error">Přihlášení není aktivované. Nastavte na serveru <code>MASSAGE_ADMIN_PASSWORD_HASH</code> nebo soukromý soubor <code>admin-hash.txt</code>.</p><?php endif;?>
-<form method="post"><input type="hidden" name="csrf" value="<?=h(mm_csrf())?>"><input type="hidden" name="action" value="login"><label>Administrátorský e-mail<input type="email" name="email" value="jgjanousek@gmail.com" autocomplete="username" required></label><label style="margin-top:12px">Heslo administrátora<input type="password" name="password" required autocomplete="current-password"></label><button type="submit">Přihlásit se</button></form></section>
+<form method="post"><input type="hidden" name="csrf" value="<?=h(mm_csrf())?>"><input type="hidden" name="action" value="login"><label>Administrátorský e-mail<input type="email" name="email" value="jgjanousek@gmail.com" autocomplete="username" required></label><label style="margin-top:12px">Heslo administrátora<input type="password" name="password" required autocomplete="current-password"></label><button type="submit">Přihlásit se</button></form>
+<details style="margin-top:20px;border-top:1px solid #e4d9c9;padding-top:16px"><summary style="cursor:pointer;font-weight:700;color:#48654e">Zapomenuté heslo? Obnovit e-mailem</summary>
+<p style="font-size:.86rem">Na ověřenou adresu administrátora pošleme jednorázový odkaz platný 30 minut.</p>
+<form method="post"><input type="hidden" name="csrf" value="<?=h(mm_csrf())?>"><input type="hidden" name="action" value="request_reset">
+<label>Administrátorský e-mail<input type="email" name="email" value="jgjanousek@gmail.com" required autocomplete="username"></label>
+<button type="submit">Poslat odkaz pro obnovu</button></form></details></section>
+<?php endif;?>
 <?php else:?>
 <div class="stats"><div><strong><?=$stats['all']?></strong><small>Všechny objednávky</small></div><div><strong><?=$stats['paid']?></strong><small>Ověřeně uhrazené</small></div><div><strong><?=$stats['pending']?></strong><small>Čekají na platbu</small></div><div><strong><?=$stats['gifts']?></strong><small>Dárkové poukazy</small></div></div>
 <section style="background:white;border:1px solid #e5d8c8;padding:20px;border-radius:14px;margin:12px 0 25px">
