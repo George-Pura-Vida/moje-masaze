@@ -97,3 +97,21 @@ Před ostrým provozem otestuj na WebKitty:
 Fio API: https://www.fio.cz/docs/cz/API_Bankovnictvi.pdf
 QR Platba: https://qr-platba.cz/pro-vyvojare/specifikace-formatu/
 Kurz ČNB: https://www.cnb.cz/cs/casto-kladene-dotazy/Kurzy-devizoveho-trhu-na-www-strankach-CNB/
+
+
+## Automatický Deploy GitHub → WebKitty (každých 5 minut)
+
+Oficiální WebKitty Git Version Control popisuje ruční Deploy. Tento projekt má připravený skript cron/auto-deploy.sh pro automatickou aktualizaci.
+
+**Předpoklad:** Git checkout moje-masaze je zároveň veřejný dokumentový kořen subdomény. Pokud repozitář leží jinde a WebKitty používá oddělenou publikovanou složku, je třeba nasazovací mechanismus upravit.
+
+Postup:
+1. Nejprve jednou ručně Deploy z Git Version Control, aby byl soubor cron/auto-deploy.sh dostupný na serveru.
+2. Web Tools → Scheduled Tasks → Add Task.
+3. Command: /bin/bash /home/sites/1a/1/1f8017897e/moje-masaze/cron/auto-deploy.sh
+4. Minute: */5; Hour, Day, Month, Weekday: *.
+5. Zkontroluj absolutní cestu podle Repository Path ve WebKitty a spusť Test Command.
+
+Bezpečnost: Skript kontroluje pouze origin George-Pura-Vida/moje-masaze a větev main, neprovádí force ani reset, odmítá přepsat ručně upravené sledované soubory a nasazuje jen přesně ten commit, který prošel GitHub Actions workflow test.yml. Lokální bankovní tokeny, SQLite a hash hesla se musí ukládat mimo veřejnou složku. Webové volání /cron/ je zakázáno přes .htaccess.
+
+Tento cron je oddělený od bankovního Fio cronu. Oba mají vlastní úlohu. Pokud WebKitty cron nepovoluje Bash/Git nebo dokumentový kořen není Git checkout, skript bezpečně skončí chybou a bude potřeba jiné řešení.
