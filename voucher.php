@@ -1,0 +1,15 @@
+<?php
+declare(strict_types=1);
+require_once __DIR__.'/lib.php';
+header('Content-Type: text/html; charset=utf-8');
+header('X-Robots-Tag: noindex,nofollow');
+header('Cache-Control: no-store');
+header('Referrer-Policy: no-referrer');
+$token=$_GET['token']??'';
+if(!is_string($token)||!preg_match('/\A[a-f0-9]{48}\z/D',$token)){http_response_code(404);exit('Poukaz nenalezen.');}
+try{$q=mm_db()->prepare("SELECT * FROM orders WHERE token=? AND kind='gift' AND status='paid' LIMIT 1");$q->execute([$token]);$o=$q->fetch();}
+catch(Throwable $e){http_response_code(503);exit('Poukaz dočasně nedostupný.');}
+if(!$o){http_response_code(404);exit('Poukaz bude dostupný po potvrzení úhrady bankou.');}
+$label=MM_FOCUS[$o['focus']]??'Masáž';$who=$o['recipient']?:'Pro někoho výjimečného';
+?>
+<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Dárkový poukaz • Moje masáže</title><style>body{margin:0;padding:35px 14px;font-family:Arial,sans-serif;background:#ede9de;color:#243127}.coupon{max-width:760px;margin:auto;background:#fffaf0;border:9px double #c69e6c;min-height:440px;padding:50px 36px;text-align:center;box-shadow:0 18px 40px #0002}.logo{color:#9b6e3c;letter-spacing:.35em;font-size:14px}.flower{font-size:58px;color:#be955f}h1{font:48px Georgia,serif;font-weight:400;margin:15px}.title{font:27px Georgia,serif;color:#9c7140}.person{font:24px Georgia,serif;margin-top:24px}p{line-height:1.8}.meta{display:flex;justify-content:center;flex-wrap:wrap;gap:18px;font-size:15px;margin:25px 0}.foot{font-size:12px;color:#716b60;margin-top:30px}.actions{text-align:center;margin:24px}.actions button,.actions a{padding:12px 20px;border:0;border-radius:8px;background:#243127;color:#fff;text-decoration:none;cursor:pointer}@media print{body{background:#fff;padding:0}.coupon{box-shadow:none;max-width:none;min-height:80vh}.actions{display:none}}@media(max-width:600px){.coupon{padding:25px 15px}h1{font-size:35px}}</style></head><body><div class="coupon"><div class="flower">❁</div><div class="logo">DOTYK &amp; KLID • MOJE MASÁŽE</div><h1>Dárkový poukaz</h1><div class="title"><?=mm_escape($label)?></div><div class="person"><?=mm_escape($who)?></div><p>Poukaz na <?=mm_escape($o['quantity'])?> × <?=mm_escape($o['duration'])?> minut masáže a chvíle klidu.</p><div class="meta"><span><b>Hodnota:</b> <?=mm_escape(mm_money((int)$o['amount_cents']))?></span><span><b>Kód:</b> MM-<?=mm_escape($o['vs'])?></span></div><p>Termín si sjednejte předem na <b>+420 777 796 148</b><br>nebo na <b>info@jirijanousek.cz</b>.</p><div class="foot">Jiří Janoušek • IČO 13798804 • Potvrzeně uhrazený poukaz • Jednorázové použití dle zakoupeného balíčku</div></div><div class="actions"><button onclick="window.print()">🖨 Vytisknout poukaz</button> <a href="/">Zpět na web</a></div></body></html>
