@@ -103,7 +103,7 @@ putenv('MASSAGE_EUR_ENABLED=1');
 $eurQuote=mm_quote(60,1,'EUR');
 check($eurQuote['iban']===MM_IBAN && $eurQuote['amount_cents']===8000,'EUR quotes match Fio IBAN and validated reference rate');
 $eurOrder=mm_create_order([...$input,'currency'=>'EUR','count'=>'1','expected_amount_cents'=>8000],'192.0.2.19');
-check($eurOrder['currency']==='EUR' && $eurOrder['iban']===MM_IBAN && $eurOrder['amount']===80.0,'EUR order is saved with correct SEPA IBAN');
+check($eurOrder['currency']==='EUR' && $eurOrder['iban']===MM_IBAN && (float)$eurOrder['amount']===80.0,'EUR order is saved with correct SEPA IBAN');
 $q=mm_db()->prepare('SELECT status FROM orders WHERE id=?');$q->execute([$eurOrder['id']]);
 check($q->fetchColumn()==='pending','EUR order stays pending until actual banking confirmation');
 putenv('MASSAGE_EUR_ENABLED=0');
