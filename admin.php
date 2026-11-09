@@ -58,7 +58,7 @@ if($authenticated){
   $db=mm_db();
   $orders=$db->query('SELECT * FROM orders ORDER BY created_at DESC LIMIT 200')->fetchAll();
   $blocks=$db->query('SELECT * FROM massage_blocks WHERE block_date>=date(\'now\') ORDER BY block_date,start_time LIMIT 100')->fetchAll();
-  $calendarUrl='https://moje-masaze.jirijanousek.cz/calendar-feed.php?key='.rawurlencode(mm_calendar_secret());
+  try{$calendarUrl='https://moje-masaze.jirijanousek.cz/calendar-feed.php?key='.rawurlencode(mm_calendar_secret());}catch(Throwable $e){$calendarUrl='';error_log('Calendar feed key: '.get_class($e));}
   $stats['all']=(int)$db->query('SELECT COUNT(*) FROM orders')->fetchColumn();
   $stats['paid']=(int)$db->query("SELECT COUNT(*) FROM orders WHERE status='paid'")->fetchColumn();
   $stats['pending']=(int)$db->query("SELECT COUNT(*) FROM orders WHERE status='pending'")->fetchColumn();
