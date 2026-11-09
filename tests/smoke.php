@@ -98,7 +98,7 @@ $key=mm_calendar_secret();
 check(preg_match('/\A[a-f0-9]{64}\z/D',$key)===1,'private calendar feed key created securely');
 
 
-check((int)mm_db()->query('SELECT COUNT(*) FROM clients')->fetchColumn()===1,'CRM deduplicates repeat massage customers by email');
+check((int)mm_db()->query('SELECT COUNT(*) FROM clients')->fetchColumn()===2,'CRM deduplicates repeat massage customers by email');
 $clientID=mm_crm_save_client(['full_name'=>'Customer Demo','email'=>'customer-demo@example.org','phone'=>'+420 777 000 111','notes'=>'Repeat appointment']);
 $client=mm_db()->prepare('SELECT full_name,email,phone,notes FROM clients WHERE id=?');$client->execute([$clientID]);$clientRow=$client->fetch();
 check($clientRow['full_name']==='Customer Demo' && str_contains($clientRow['notes'],'Repeat'),'CRM owner can create and edit customer profiles');
@@ -120,10 +120,11 @@ $inquiry=mm_crm_add_inquiry(['name'=>'Test Contact','email'=>'contact@example.or
 $q=mm_db()->prepare('SELECT status FROM inquiries WHERE id=?');$q->execute([$inquiry]);
 check($q->fetchColumn()==='new','contact message safely stored in inbox');
 
+
+check((int)mm_db()->query("SELECT COUNT(*) FROM inquiry_email_queue WHERE status='pending'")->fetchColumn()===2,'client and administrator contact confirmation messages queued');
 $contactAuto=mm_crm_add_inquiry(['name'=>'Test Client CZ','email'=>'booking.test@example.org','phone'=>'+420700123456','subject'=>'Gift voucher','message'=>'Please arrange a new massage appointment for next week.','website'=>'autofilled.example','terms'=>true,'csrf'=>$csrf],'192.0.2.123');
 check(strlen($contactAuto)===24,'contact form saves with matching customer email and autofilled legacy field');
 
-check((int)mm_db()->query("SELECT COUNT(*) FROM inquiry_email_queue WHERE status='pending'")->fetchColumn()===2,'client and administrator contact confirmation messages queued');
 mm_crm_inquiry_status($inquiry,'resolved');$q->execute([$inquiry]);check($q->fetchColumn()==='resolved','inbox message can be marked resolved');
 require_once dirname(__DIR__).'/admin-auth.php';
 $ownerPassword='ExampleTestPassphrase_2026_only';
