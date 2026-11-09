@@ -219,7 +219,7 @@ function mm_quote(int $duration,int $quantity,string $currency): array {
  if($currency!=='EUR')throw new InvalidArgumentException('Nepodporovaná měna.');
  if(!mm_eur_enabled())throw new InvalidArgumentException('EUR platby zatím nejsou aktivní. Zvolte prosím CZK.');
  $rate=mm_eur_rate();
- return ['amount_cents'=>(int)round($czk/$rate),'currency'=>'EUR','fx_rate'=>$rate,'iban'=>mm_eur_iban(),'bic'=>mm_eur_bic(),'account'=>mm_eur_iban()];
+ return ['amount_cents'=>(int)round(($czk/100)/$rate)*100,'currency'=>'EUR','fx_rate'=>$rate,'iban'=>mm_eur_iban(),'bic'=>mm_eur_bic(),'account'=>mm_eur_iban()];
 }
 
 
@@ -332,7 +332,7 @@ function mm_rate_limit(string $ip): void {
   $query=$db->prepare('INSERT INTO rate (ip_hash,hour,hits) VALUES (?,?,1) ON CONFLICT(ip_hash,hour) DO UPDATE SET hits=hits+1');
   $query->execute([$h,$hour]);
   $q=$db->prepare('SELECT hits FROM rate WHERE ip_hash=? AND hour=?');$q->execute([$h,$hour]);
-  if((int)$q->fetchColumn()>8)throw new RuntimeException('Příliš mnoho požadavků. Zkuste to prosím později.');
+  if((int)$q->fetchColumn()>24)throw new RuntimeException('Příliš mnoho požadavků. Zkuste to prosím později.');
 }
 function mm_text(mixed $raw,int $max,bool $required=false,string $field='údaj'): string {
   if(!is_string($raw))throw new InvalidArgumentException('Zkontrolujte pole „'.$field.'“.');
@@ -342,7 +342,6 @@ function mm_text(mixed $raw,int $max,bool $required=false,string $field='údaj')
   return $value;
 }
 function mm_create_order(array $in,string $ip): array {
-  mm_rate_limit($ip);
   // Do not reject real clients when password managers autofill obsolete honeypot fields.
   // CSRF and per-IP rate limits still protect this endpoint.
   if(($in['terms']??null)!==true)throw new InvalidArgumentException('Potvrďte podmínky objednávky.');
@@ -380,6 +379,7 @@ function mm_create_order(array $in,string $ip): array {
     require_once __DIR__.'/google-calendar-lib.php';
     if(!mm_google_slot_free($prefDate,$prefTime,$duration))throw new InvalidArgumentException('Vybraný čas je obsazený ve vašem Google Kalendáři.');
   }
+  mm_rate_limit('order:'.$ip);
   $db->exec('BEGIN IMMEDIATE');
   try {
   $clientId=mm_crm_upsert_client($db,$name,$email,$phone,time());
@@ -403,7 +403,7 @@ function mm_create_order(array $in,string $ip): array {
 function mm_queue(string $id,string $kind): void {
   $q=mm_db()->prepare("INSERT OR IGNORE INTO email_queue(order_id,kind,created_at) VALUES (?,?,?)");$q->execute([$id,$kind,time()]);
 }
-function mm_money(int $cents,string $currency='CZK'): string {return number_format($cents/100,$currency==='EUR'?2:($cents%100?2:0),',',' ').($currency==='EUR'?' €':' Kč');}
+function mm_money(int $cents,string $currency='CZK'): string {return number_format($cents/100,$cents%100?2:0,',',' ').($currency==='EUR'?' €':' Kč');}
 function mm_escape(mixed $value): string{return htmlspecialchars((string)$value,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');}
 function mm_admin(): string {$raw=mm_config('MASSAGE_ADMIN_EMAIL');return filter_var($raw,FILTER_VALIDATE_EMAIL)?$raw:MM_ADMIN_DEFAULT;}
 function mm_header_encoded(string $s): string {return '=?UTF-8?B?'.base64_encode($s).'?=';}
@@ -560,8 +560,7 @@ function mm_dispatch_mail(int $max=20): array {
   $count=['sent'=>0,'failed'=>0];
   foreach($rows as $o){
     $q=$db->prepare("UPDATE email_queue SET status='sending' WHERE id=? AND status IN ('pending','failed')");$q->execute([$o['queue_id']]);if($q->rowCount()!==1)continue;
-    $template=mm_mail_template($o,$o['mail_kind']);
-    try{$ok=mm_send(str_ends_with($o['mail_kind'],'_admin')?mm_admin():$o['email'],$template);}catch(Throwable $e){$ok=false;error_log('MM mail transport: '.get_class($e));}
+    try{$template=mm_mail_template($o,$o['mail_kind']);$ok=mm_send(str_ends_with($o['mail_kind'],'_admin')?mm_admin():$o['email'],$template);}catch(Throwable $e){$ok=false;error_log('MM mail transport: '.get_class($e));}
     $db->prepare('UPDATE email_queue SET status=? WHERE id=? AND status=?')->execute([$ok?'sent':'failed',$o['queue_id'],'sending']);
     $count[$ok?'sent':'failed']++;
   }
