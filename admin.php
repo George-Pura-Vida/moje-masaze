@@ -6,6 +6,7 @@ session_set_cookie_params(['lifetime'=>0,'path'=>'/','secure'=>(!empty($_SERVER[
 session_start();
 require_once __DIR__.'/lib.php';
 require_once __DIR__.'/admin-auth.php';
+require_once __DIR__.'/google-calendar-lib.php';
 header('Content-Type: text/html; charset=utf-8');
 header('Cache-Control: private, no-store, max-age=0');
 header('X-Robots-Tag: noindex, nofollow, noarchive');
@@ -60,9 +61,16 @@ if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
    if($action==='add_block'){mm_block_create((string)($_POST['block_date']??''),(string)($_POST['block_start']??''),(string)($_POST['block_end']??''),(string)($_POST['block_note']??''));redirect_admin('Časová blokace byla vytvořena.');}
    if($action==='delete_block'){$blockId=filter_var($_POST['block_id']??null,FILTER_VALIDATE_INT);if(!$blockId||$blockId<1)throw new InvalidArgumentException('Neplatná blokace.');$delete=mm_db()->prepare('DELETE FROM massage_blocks WHERE id=?');$delete->execute([$blockId]);redirect_admin('Blokace byla zrušena.');}
    $order=mm_admin_update((string)($_POST['order_id']??''),$action,$_POST);
-   $notice='Změna byla uložena.';
-   if(in_array($action,['confirm','schedule_gift','cancel'],true)&&!mm_appointment_notice($order,$action))$notice='Změna je uložená, ale odeslání e-mailu se nezdařilo. Kontaktujte klienta osobně.';
-   redirect_admin($notice);
+   $warnings=[];
+   if(in_array($action,['confirm','schedule_gift','cancel','complete'],true)&&mm_google_connected()){
+    try{mm_google_sync_order($order);}catch(Throwable $e){
+      error_log('MM Google sync: '.get_class($e).' '.substr($e->getMessage(),0,120));
+      $warnings[]='Google Kalendář nebyl aktualizován. Zkontrolujte připojení.';
+    }
+   }
+   if(in_array($action,['confirm','schedule_gift','cancel'],true)&&!mm_appointment_notice($order,$action))
+    $warnings[]='E-mail se nepodařilo odeslat. Kontaktujte klienta.';
+   redirect_admin($warnings?implode(' ',$warnings):'Změna byla uložena.');
   }catch(Throwable $e){$alert=$e instanceof InvalidArgumentException?$e->getMessage():'Změnu se nepodařilo uložit.';http_response_code(422);}
  }
 }
@@ -135,7 +143,9 @@ function h(mixed $s): string {return mm_escape($s);}
 <div class="stats"><div><strong><?=$stats['all']?></strong><small>Všechny objednávky</small></div><div><strong><?=$stats['paid']?></strong><small>Ověřeně uhrazené</small></div><div><strong><?=$stats['pending']?></strong><small>Čekají na platbu</small></div><div><strong><?=$stats['gifts']?></strong><small>Dárkové poukazy</small></div></div>
 <section style="background:white;border:1px solid #e5d8c8;padding:20px;border-radius:14px;margin:12px 0 25px">
 <h2 style="margin:0 0 12px">📆 Rezervační kalendář</h2>
-<p>Volné termíny na webu se kontrolují proti těmto rezervacím a časovým blokacím. Propojení s Google Kalendářem funguje formou soukromého odběru potvrzených termínů; obsazenost vašeho osobního Google Kalendáře se zpět na web automaticky nepřenáší.</p>
+<p>Volné termíny se kontrolují proti interním rezervacím a blokacím<?php if(mm_google_connected()):?> i proti vašemu propojenému Google Kalendáři<?php endif;?>. Při potvrzení termínu se událost synchronizuje přes Google Calendar API, pokud je účet autorizovaný.</p>
+<p><a class="button" href="google-calendar.php" style="background:#2c4935;color:#fff;text-decoration:none;padding:11px 18px;border-radius:9px;display:inline-block;font-weight:700">🔗 Google Calendar API · <?=mm_google_connected()?'Připojeno':'Propojit účet'?></a>
+<span class="tag"><?=mm_google_connected()?'Google API aktivní':'Google API neaktivní'?></span></p>
 <?php if($calendarUrl!==''):?><p><strong>Soukromý odkaz pro Google Kalendář:</strong> <a href="<?=h($calendarUrl)?>" rel="nofollow">Otevřít kalendářový soubor .ics</a></p>
 <details><summary>Zobrazit odkaz pro odběr v Google Kalendáři</summary><input type="text" readonly onclick="this.select()" style="width:100%" value="<?=h($calendarUrl)?>"><small>Odkaz je tajný. V Google Kalendáři zvolte Jiné kalendáře → Z adresy URL a vložte jej. Synchronizace Google může být opožděná.</small></details><?php endif;?>
 <h3 style="margin:20px 0 10px">Blokovat obsazený čas</h3><form method="post" class="inline" style="background:#f8f3eb;padding:13px;border-radius:9px">
