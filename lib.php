@@ -54,7 +54,12 @@ CREATE TABLE IF NOT EXISTS orders (
  created_at INTEGER NOT NULL,
  status TEXT NOT NULL DEFAULT 'pending',
  paid_at INTEGER,
- fio_id TEXT UNIQUE
+ fio_id TEXT UNIQUE,
+ appointment_status TEXT NOT NULL DEFAULT 'requested',
+ confirmed_date TEXT NOT NULL DEFAULT '',
+ confirmed_time TEXT NOT NULL DEFAULT '',
+ redeemed_count INTEGER NOT NULL DEFAULT 0,
+ redeemed_at INTEGER
 );
 CREATE TABLE IF NOT EXISTS email_queue (
  id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -77,6 +82,11 @@ CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
   $names=array_column($columns,'name');
   if(!in_array('currency',$names,true))$db->exec("ALTER TABLE orders ADD COLUMN currency TEXT NOT NULL DEFAULT 'CZK'");
   if(!in_array('fx_rate',$names,true))$db->exec("ALTER TABLE orders ADD COLUMN fx_rate REAL NOT NULL DEFAULT 1");
+  if(!in_array('appointment_status',$names,true))$db->exec("ALTER TABLE orders ADD COLUMN appointment_status TEXT NOT NULL DEFAULT 'requested'");
+  if(!in_array('confirmed_date',$names,true))$db->exec("ALTER TABLE orders ADD COLUMN confirmed_date TEXT NOT NULL DEFAULT ''");
+  if(!in_array('confirmed_time',$names,true))$db->exec("ALTER TABLE orders ADD COLUMN confirmed_time TEXT NOT NULL DEFAULT ''");
+  if(!in_array('redeemed_count',$names,true))$db->exec("ALTER TABLE orders ADD COLUMN redeemed_count INTEGER NOT NULL DEFAULT 0");
+  if(!in_array('redeemed_at',$names,true))$db->exec("ALTER TABLE orders ADD COLUMN redeemed_at INTEGER");
   @chmod($file,0600);
   return $db;
 }
@@ -276,4 +286,43 @@ function mm_dispatch_mail(int $max=20): array {
     $count[$ok?'sent':'failed']++;
   }
   return $count;
+}
+
+/** Administrator-only status updates. Never alter bank-confirmed payment state manually. */
+function mm_admin_update(string $id,string $action,array $data): array {
+ $db=mm_db();
+ if(!preg_match('/\A[a-f0-9]{24}\z/D',$id))throw new InvalidArgumentException('Neplatné ID.');
+ $q=$db->prepare('SELECT * FROM orders WHERE id=?');$q->execute([$id]);$o=$q->fetch();
+ if(!$o)throw new InvalidArgumentException('Objednávka nenalezena.');
+ if($action==='redeem'){
+  if($o['kind']!=='gift'||$o['status']!=='paid')throw new InvalidArgumentException('Poukaz musí být uhrazený.');
+  $sql="UPDATE orders SET redeemed_count=redeemed_count+1,redeemed_at=? WHERE id=? AND kind='gift' AND status='paid' AND redeemed_count<quantity";
+  $update=$db->prepare($sql);$update->execute([time(),$id]);
+  if($update->rowCount()!==1)throw new InvalidArgumentException('Poukaz je již plně využit.');
+ }elseif($action==='confirm'){
+  if($o['kind']!=='booking')throw new InvalidArgumentException('Pro poukaz nejprve domluvte termín.');
+  $date=mm_text($data['confirmed_date']??'',10,true);
+  $time=mm_text($data['confirmed_time']??'',5,true);
+  $dateObj=DateTimeImmutable::createFromFormat('!Y-m-d',$date,new DateTimeZone('Europe/Prague'));
+  if(!$dateObj||$dateObj->format('Y-m-d')!==$date||$dateObj<(new DateTimeImmutable('today',new DateTimeZone('Europe/Prague'))))throw new InvalidArgumentException('Datum musí být dnes nebo později.');
+  if(!preg_match('/\A(?:0[7-9]|1[0-9]|2[01]):(?:00|15|30|45)\z/D',$time))throw new InvalidArgumentException('Neplatný čas.');
+  $update=$db->prepare("UPDATE orders SET appointment_status='confirmed',confirmed_date=?,confirmed_time=? WHERE id=? AND kind='booking'");
+  $update->execute([$date,$time,$id]);
+ }elseif($action==='cancel'||$action==='complete'){
+  if($o['kind']!=='booking')throw new InvalidArgumentException('Nevhodná akce.');
+  $update=$db->prepare('UPDATE orders SET appointment_status=? WHERE id=?');
+  $update->execute([$action==='cancel'?'cancelled':'completed',$id]);
+ }else{throw new InvalidArgumentException('Neplatná akce.');}
+ $q=$db->prepare('SELECT * FROM orders WHERE id=?');$q->execute([$id]);return $q->fetch();
+}
+function mm_appointment_notice(array $o,string $action): bool {
+ if(!in_array($action,['confirm','cancel'],true))return true;
+ $confirmed=$action==='confirm';
+ $heading=$confirmed?'Potvrzení termínu masáže':'Zrušení termínu masáže';
+ $details=$confirmed
+   ?'Potvrzujeme termín '.($o['confirmed_date']??'').' v '.($o['confirmed_time']??'').'.'
+   :'Domluvený termín byl zrušen. Pro nový termín nás prosím kontaktujte.';
+ $plain=mm_salutation((string)$o['buyer_name'])."\n\n".$heading."\n".$details."\n".MM_FOCUS[$o['focus']]."\n\nJiří Janoušek | Moje masáže\n";
+ $html='<!doctype html><html lang="cs"><meta charset="utf-8"><body style="background:#f7f1e7;padding:18px;font-family:Arial,sans-serif"><table style="max-width:560px;margin:auto;background:white;border-collapse:collapse"><tr><td style="padding:25px;background:#1d2a21;color:#efdab5;font-size:24px;font-family:Georgia,serif">❁ DOTYK &amp; KLID</td></tr><tr><td style="padding:28px"><h1 style="font-family:Georgia,serif;font-weight:400">'.mm_escape($heading).'</h1><p>'.mm_escape(mm_salutation((string)$o['buyer_name'])).'</p><p>'.mm_escape($details).'</p><p><strong>'.mm_escape(MM_FOCUS[$o['focus']]).'</strong> • '.(int)$o['duration'].' minut</p><p>Jiří Janoušek<br>info@jirijanousek.cz</p></td></tr></table></body></html>';
+ return mm_send($o['email'],['subject'=>($confirmed?'📅':'ℹ️').' '.$heading.' | Moje masáže','text'=>$plain,'html'=>$html]);
 }
