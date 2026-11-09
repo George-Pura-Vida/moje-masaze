@@ -1,0 +1,25 @@
+name: Moje masaze - quality checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: PHP syntax (all application files)
+        run: |
+          find . -type f -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l
+      - name: PHP order and pricing tests
+        run: php tests/smoke.php
+      - name: JavaScript syntax
+        run: |
+          node --check app.js
+          node --check i18n.js
+          for f in i18n-*.js; do node --check "$f"; done
+      - name: Translation integrity
+        run: node --test tests/translations.test.mjs
