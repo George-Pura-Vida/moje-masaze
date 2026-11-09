@@ -32,13 +32,14 @@ check(preg_match('/\A57[0-9]{8}\z/D',$order['vs'])===1,'unique ten-digit order v
 check((float)$order['amount']===3800.0,'server recomputes price');
 check($order['currency']==='CZK','server returns payment currency');
 check(mm_eur_iban()===MM_IBAN,'EUR transfer uses the same owner-verified Fio IBAN');
-$withoutHoneypot=$input;unset($withoutHoneypot['website']);
-$cleanOrder=mm_create_order($withoutHoneypot,'192.0.2.18');
-check($cleanOrder['id']!==''&&$cleanOrder['currency']==='CZK','real CZK order without auto-filled anti-spam field is accepted');
+
 $q=mm_db()->prepare('SELECT * FROM orders WHERE id=?');$q->execute([$order['id']]);$row=$q->fetch();
 check($row!==false && $row['status']==='pending','new order is unpaid');
 check($row['amount_cents']===380000,'stored amount cannot be controlled by client');
 check((int)mm_db()->query('SELECT COUNT(*) FROM email_queue')->fetchColumn()===2,'two initial operational emails queued');
+$withoutHoneypot=$input;unset($withoutHoneypot['website']);
+$cleanOrder=mm_create_order($withoutHoneypot,'192.0.2.18');
+check($cleanOrder['id']!==''&&$cleanOrder['currency']==='CZK','real CZK order without auto-filled anti-spam field is accepted');
 check(str_contains(mm_mail_template($row,'new_client')['html'],'DOTYK'),'branded HTML email');
 try{mm_create_order([...$input,'csrf'=>'invalid'],'192.0.2.2');throw new RuntimeException('FAIL: invalid CSRF accepted');}catch(InvalidArgumentException $e){check(true,'invalid CSRF rejected');}
 try{mm_create_order([...$input,'currency'=>'EUR'],'192.0.2.3');throw new RuntimeException('FAIL: unconfigured EUR order accepted');}catch(InvalidArgumentException $e){check(true,'unconfigured EUR order rejected');}
