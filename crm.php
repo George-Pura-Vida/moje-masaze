@@ -67,9 +67,9 @@ function mm_crm_phone(string $phone): string {
 }
 function mm_crm_save_client(array $in): string {
  $name=mm_text($in['full_name']??null,120,true);
- $email=strtolower(mm_text($in['email']??null,254,true));
+ $email=strtolower(mm_text($in['email']??null,254,true,'E-mail'));
  if(!filter_var($email,FILTER_VALIDATE_EMAIL))throw new InvalidArgumentException('Neplatný e-mail.');
- $phone=mm_crm_phone(mm_text($in['phone']??'',25));
+ $phone=mm_crm_phone(mm_text($in['phone']??'',25,false,'Telefon'));
  $notes=mm_text($in['notes']??'',2500);
  $id=(string)($in['client_id']??'');
  $db=mm_db();
@@ -97,15 +97,16 @@ function mm_crm_archive_client(string $id,bool $archived): void {
 }
 function mm_crm_add_inquiry(array $in,string $ip): string {
  mm_rate_limit('inquiry:'.$ip);
- if(($in['website']??'')!=='')throw new InvalidArgumentException('Zprávu se nepodařilo přijmout.');
+ // Legacy hidden spam field is ignored: some password managers mistakenly fill it.
+ // CSRF, minimum message length and rate limiting remain active.
  if(($in['terms']??null)!==true)throw new InvalidArgumentException('Souhlas se zpracováním je nutný.');
  if(!isset($in['csrf'])||!is_string($in['csrf'])||!hash_equals(mm_csrf(),$in['csrf']))throw new InvalidArgumentException('Obnovte stránku.');
- $name=mm_text($in['name']??null,120,true);
+ $name=mm_text($in['name']??null,120,true,'Jméno a příjmení');
  $email=strtolower(mm_text($in['email']??null,254,true));
  if(!filter_var($email,FILTER_VALIDATE_EMAIL))throw new InvalidArgumentException('Neplatný e-mail.');
  $phone=mm_crm_phone(mm_text($in['phone']??'',25));
- $subject=mm_text($in['subject']??'Dotaz k masáži',130,true);
- $msg=mm_text($in['message']??null,2500,true);
+ $subject=mm_text($in['subject']??'Dotaz k masáži',130,true,'Předmět zprávy');
+ $msg=mm_text($in['message']??null,2500,true,'Vaše zpráva');
  if(strlen($msg)<10)throw new InvalidArgumentException('Zpráva je příliš krátká.');
  $db=mm_db();$id=bin2hex(random_bytes(12));
  $db->exec('BEGIN IMMEDIATE');
