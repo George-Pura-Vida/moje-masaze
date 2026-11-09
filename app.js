@@ -140,10 +140,17 @@ form.addEventListener('submit',async e=>{
   try{result=JSON.parse(raw);}catch{throw Error('Objednávkový server nevrátil platnou odpověď. Zkontrolujte system-status.php na webu.');}
   if(!response.ok)throw Error((result.error||t('failed'))+(response.status>=500?' (server '+response.status+')':''));
   if(!['CZK','EUR'].includes(result.currency)||!(result.amount>0)||!/^[0-9]{10}$/.test(result.vs))throw Error('Neplatná odpověď serveru.');
-  latestOrder=result;renderQr(result);
+  latestOrder=result;
+  const page=$('#paymentPage');
+  if(page){page.href='payment.php?token='+encodeURIComponent(result.token);page.hidden=false;}
+  let qrOk=true;
+  try{renderQr(result);}catch(qrError){
+   qrOk=false;
+   $('#qrCode').textContent='QR kód nelze v tomto prohlížeči vykreslit. Použijte platební stránku nebo ruční zadání bankovních údajů.';
+  }
   $('#payAmountValue').textContent=format(Math.round(result.amount*100),result.currency);
   $('#payAccountValue').textContent=result.account;$('#payIbanValue').textContent=result.iban;$('#payVsValue').textContent=result.vs;
-  $('#payState').textContent=t('pending');paymentFeedback.textContent='';pay.hidden=false;notice(t(result.kind==='gift'?'giftCreated':'created'));
+  $('#payState').textContent=t('pending');paymentFeedback.textContent=qrOk?'':'Objednávka byla uložena. Platební údaje jsou dostupné na platební stránce.';pay.hidden=false;notice(t(result.kind==='gift'?'giftCreated':'created'));
   pay.scrollIntoView({behavior:'smooth',block:'start'});
  }catch(err){notice(err.message||t('failed'),true);}
  finally{renderPrice();}
