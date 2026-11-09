@@ -41,6 +41,8 @@ CREATE TABLE IF NOT EXISTS orders (
  duration INTEGER NOT NULL CHECK(duration IN (60,180)),
  quantity INTEGER NOT NULL CHECK(quantity IN (1,2,3)),
  amount_cents INTEGER NOT NULL,
+ currency TEXT NOT NULL DEFAULT 'CZK',
+ fx_rate REAL NOT NULL DEFAULT 1,
  buyer_name TEXT NOT NULL,
  email TEXT NOT NULL,
  phone TEXT NOT NULL,
@@ -71,6 +73,10 @@ CREATE TABLE IF NOT EXISTS rate (
 );
 CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
 ");
+  $columns=$db->query('PRAGMA table_info(orders)')->fetchAll(PDO::FETCH_ASSOC);
+  $names=array_column($columns,'name');
+  if(!in_array('currency',$names,true))$db->exec("ALTER TABLE orders ADD COLUMN currency TEXT NOT NULL DEFAULT 'CZK'");
+  if(!in_array('fx_rate',$names,true))$db->exec("ALTER TABLE orders ADD COLUMN fx_rate REAL NOT NULL DEFAULT 1");
   @chmod($file,0600);
   return $db;
 }
@@ -80,6 +86,60 @@ function mm_price(int $duration,int $quantity): int {
   $percent=$quantity===1?100:($quantity===2?95:90);
   return intdiv($unit*$quantity*$percent,100);
 }
+function mm_eur_iban(): string {
+ $iban=strtoupper(preg_replace('/\s+/','',(string)(getenv('MASSAGE_EUR_IBAN')?:'')));
+ if(!preg_match('/\A[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}\z/D',$iban) || $iban===MM_IBAN)return '';
+ return $iban;
+}
+function mm_eur_enabled(): bool {
+ return getenv('MASSAGE_EUR_ENABLED')==='1' && mm_eur_iban()!=='' && getenv('MASSAGE_EUR_FIO_CONFIGURED')==='1';
+}
+function mm_eur_bic(): string {
+ $bic=strtoupper(trim((string)(getenv('MASSAGE_EUR_BIC')?:'FIOBCZPPXXX')));
+ return preg_match('/\A[A-Z0-9]{8}(?:[A-Z0-9]{3})?\z/D',$bic)?$bic:'FIOBCZPPXXX';
+}
+function mm_eur_rate(): float {
+ // EUR quote uses the last officially published CNB reference rate.
+ $private=mm_private_dir().'/eur-rate.json';
+ if(is_file($private) && (time()-(int)filemtime($private)<86400)){
+   $row=json_decode((string)file_get_contents($private),true);
+   if(is_array($row)&&isset($row['rate'])&&$row['rate']>=15&&$row['rate']<=45)return (float)$row['rate'];
+ }
+ if(!function_exists('curl_init'))throw new RuntimeException('Kurz EUR není nyní dostupný.');
+ $url='https://www.cnb.cz/cs/financni-trhy/devizovy-trh/kurzy-devizoveho-trhu/kurzy-devizoveho-trhu/denni_kurz.txt';
+ $curl=curl_init($url);
+ curl_setopt_array($curl,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>5,CURLOPT_TIMEOUT=>9,CURLOPT_FOLLOWLOCATION=>false,CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2]);
+ $raw=curl_exec($curl);$status=(int)curl_getinfo($curl,CURLINFO_HTTP_CODE);curl_close($curl);
+ if($status===200&&is_string($raw)&&strlen($raw)<100000){
+  foreach(explode("\n",$raw) as $line){
+   $parts=explode('|',trim($line));
+   if(count($parts)===5&&$parts[3]==='EUR'&&ctype_digit($parts[2])&&(int)$parts[2]>0){
+    $rate=(float)str_replace(',','.',$parts[4])/(int)$parts[2];
+    if($rate>=15&&$rate<=45){
+      $tmp=$private.'.'.bin2hex(random_bytes(5)).'.tmp';
+      file_put_contents($tmp,json_encode(['rate'=>$rate,'date'=>trim(explode("\n",$raw)[0])]),LOCK_EX);
+      @chmod($tmp,0600);@rename($tmp,$private);
+      return $rate;
+    }
+   }
+  }
+ }
+ // A weekend / holiday may use a recent cached rate, but never an old one.
+ if(is_file($private)&&time()-(int)filemtime($private)<5*86400){
+   $row=json_decode((string)file_get_contents($private),true);
+   if(is_array($row)&&isset($row['rate'])&&$row['rate']>=15&&$row['rate']<=45)return (float)$row['rate'];
+ }
+ throw new RuntimeException('Aktuální kurz ČNB není dostupný. Zvolte prosím CZK.');
+}
+function mm_quote(int $duration,int $quantity,string $currency): array {
+ $czk=mm_price($duration,$quantity);
+ if($currency==='CZK')return ['amount_cents'=>$czk,'currency'=>'CZK','fx_rate'=>1.0,'iban'=>MM_IBAN,'bic'=>'FIOBCZPPXXX','account'=>MM_ACCOUNT];
+ if($currency!=='EUR')throw new InvalidArgumentException('Nepodporovaná měna.');
+ if(!mm_eur_enabled())throw new InvalidArgumentException('EUR platby zatím nejsou aktivní. Zvolte prosím CZK.');
+ $rate=mm_eur_rate();
+ return ['amount_cents'=>(int)round($czk/$rate),'currency'=>'EUR','fx_rate'=>$rate,'iban'=>mm_eur_iban(),'bic'=>mm_eur_bic(),'account'=>mm_eur_iban()];
+}
+
 function mm_csrf(): string {
   if(session_status()!==PHP_SESSION_ACTIVE)session_start();
   if(empty($_SESSION['mm_csrf']))$_SESSION['mm_csrf']=bin2hex(random_bytes(24));
@@ -115,7 +175,10 @@ function mm_create_order(array $in,string $ip): array {
   $kind=$in['kind']??null;$focus=$in['focus']??null;$duration=filter_var($in['duration']??null,FILTER_VALIDATE_INT);$quantity=filter_var($in['count']??null,FILTER_VALIDATE_INT);
   if(!in_array($kind,['gift','booking'],true)||!is_string($focus)||!array_key_exists($focus,MM_FOCUS))throw new InvalidArgumentException('Vyberte platnou službu.');
   if(!is_int($duration)||!is_int($quantity))throw new InvalidArgumentException('Vyberte platný balíček.');
-  $amount=mm_price($duration,$quantity);
+  $currency=$in['currency']??'CZK';
+  if(!is_string($currency))throw new InvalidArgumentException('Neplatná měna.');
+  $quote=mm_quote($duration,$quantity,$currency);
+  $amount=$quote['amount_cents'];
   $name=mm_text($in['name']??null,120,true);
   $email=mm_text($in['email']??null,254,true);
   if(!filter_var($email,FILTER_VALIDATE_EMAIL))throw new InvalidArgumentException('Zadejte platný e-mail.');
@@ -136,8 +199,8 @@ function mm_create_order(array $in,string $ip): array {
   for($i=0;$i<20;$i++){
     $vs='57'.(string)random_int(10000000,99999999);
     try{
-      $q=$db->prepare("INSERT INTO orders (id,token,vs,kind,focus,duration,quantity,amount_cents,buyer_name,email,phone,recipient,preferred_date,preferred_time,note,lang,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
-      $q->execute([$id,$token,$vs,$kind,$focus,$duration,$quantity,$amount,$name,$email,$phone,$recipient,$prefDate,$prefTime,$note,$lang,time()]);
+      $q=$db->prepare("INSERT INTO orders (id,token,vs,kind,focus,duration,quantity,amount_cents,currency,fx_rate,buyer_name,email,phone,recipient,preferred_date,preferred_time,note,lang,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+      $q->execute([$id,$token,$vs,$kind,$focus,$duration,$quantity,$amount,$currency,$quote['fx_rate'],$name,$email,$phone,$recipient,$prefDate,$prefTime,$note,$lang,time()]);
       break;
     }catch(PDOException $e){
       if(str_contains($e->getMessage(),'UNIQUE constraint failed: orders.vs')&&$i<19)continue;
@@ -145,12 +208,12 @@ function mm_create_order(array $in,string $ip): array {
     }
   }
   mm_queue($id,'new_client');mm_queue($id,'new_admin');
-  return ['id'=>$id,'token'=>$token,'vs'=>$vs,'amount'=>$amount/100,'kind'=>$kind];
+  return ['id'=>$id,'token'=>$token,'vs'=>$vs,'amount'=>$amount/100,'kind'=>$kind,'currency'=>$currency,'iban'=>$quote['iban'],'bic'=>$quote['bic'],'account'=>$quote['account']];
 }
 function mm_queue(string $id,string $kind): void {
   $q=mm_db()->prepare("INSERT OR IGNORE INTO email_queue(order_id,kind,created_at) VALUES (?,?,?)");$q->execute([$id,$kind,time()]);
 }
-function mm_money(int $cents): string {return number_format($cents/100,$cents%100?2:0,',',' ').' Kč';}
+function mm_money(int $cents,string $currency='CZK'): string {return number_format($cents/100,$currency==='EUR'?2:($cents%100?2:0),',',' ').($currency==='EUR'?' €':' Kč');}
 function mm_escape(mixed $value): string{return htmlspecialchars((string)$value,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');}
 function mm_admin(): string {$raw=getenv('MASSAGE_ADMIN_EMAIL');return is_string($raw)&&filter_var($raw,FILTER_VALIDATE_EMAIL)?$raw:MM_ADMIN_DEFAULT;}
 function mm_header_encoded(string $s): string {return '=?UTF-8?B?'.base64_encode($s).'?=';}
@@ -175,7 +238,7 @@ function mm_mail_template(array $o,string $kind): array {
    'Masáž'=>MM_FOCUS[$o['focus']]??$o['focus'],
    'Délka'=>(string)$o['duration'].' minut',
    'Počet masáží'=>(string)$o['quantity'],
-   'Cena'=>mm_money((int)$o['amount_cents']),
+   'Cena'=>mm_money((int)$o['amount_cents'],$o['currency']??'CZK'),
    'Variabilní symbol'=>$o['vs'],
   ];
   if($admin){$fields['Klient']=$o['buyer_name'];$fields['E-mail']=$o['email'];$fields['Telefon']=$o['phone'];}
@@ -186,11 +249,11 @@ function mm_mail_template(array $o,string $kind): array {
   if($paid&&$gift&&!$admin)$intro.=' Váš poukaz můžete otevřít a vytisknout zde: '.$url;
   $plain=($admin?'Dobrý den, administrátore,':mm_salutation($o['buyer_name']))."\n\n".$head."\n\n".$intro."\n";
   foreach($fields as $key=>$value)$plain.=$key.': '.$value."\n";
-  if(!$paid)$plain.="Účet: ".MM_ACCOUNT."\nIBAN: ".MM_IBAN."\n";
+  if(!$paid)$plain.="Účet/IBAN: ".(($o['currency']??'CZK')==='EUR'?mm_eur_iban():MM_ACCOUNT)."\nIBAN: ".(($o['currency']??'CZK')==='EUR'?mm_eur_iban():MM_IBAN)."\n";
   $plain.="\nJiří Janoušek | Moje masáže\ninfo@jirijanousek.cz\n";
   $rows='';foreach($fields as $key=>$value){$rows.='<tr><td style="padding:10px;border-bottom:1px solid #eee4d6;color:#6c6a61">'.mm_escape($key).'</td><td style="padding:10px;border-bottom:1px solid #eee4d6;color:#2e382f;font-weight:700">'.mm_escape($value).'</td></tr>';}
   $extra='';
-  if(!$paid)$extra='<p style="background:#f9f2e5;padding:15px;border-radius:9px">Před potvrzením úhrady zkontrolujte částku, účet <strong>'.MM_ACCOUNT.'</strong> a VS <strong>'.mm_escape($o['vs']).'</strong>. Potvrzení banky není totéž co vytvoření QR kódu.</p>';
+  if(!$paid)$extra='<p style="background:#f9f2e5;padding:15px;border-radius:9px">Před potvrzením úhrady zkontrolujte měnu, částku, účet <strong>'.mm_escape(($o['currency']??'CZK')==='EUR'?mm_eur_iban():MM_ACCOUNT).'</strong> a VS <strong>'.mm_escape($o['vs']).'</strong>. U EUR platby uveďte také referenci MMVS-'.mm_escape($o['vs']).' ve zprávě pro příjemce. Samotný QR kód není dokladem platby.</p>';
   if($paid&&$gift&&!$admin)$extra='<p style="margin:26px 0"><a href="'.mm_escape($url).'" style="background:#aa7d47;color:#fff;padding:13px 24px;text-decoration:none;border-radius:8px;font-weight:700">🎁 Zobrazit dárkový poukaz</a></p>';
   $html='<!doctype html><html lang="cs"><head><meta charset="utf-8"></head><body style="background:#f6f1e8;margin:0;padding:24px 10px;font-family:Arial,Helvetica,sans-serif;color:#273227"><table role="presentation" style="max-width:640px;width:100%;border-collapse:collapse;margin:auto;background:#fff;border:1px solid #e4d8c7"><tr><td style="padding:29px;background:#1d2a21;color:#fff;border-bottom:5px solid #c7a06d"><div style="font-family:Georgia,serif;font-size:27px;color:#e8c99d">❁ DOTYK &amp; KLID</div><div style="font-size:12px;letter-spacing:2px;color:#e5e6da">MOJE MASÁŽE • JIŘÍ JANOUŠEK</div></td></tr><tr><td style="padding:28px"><p>'.mm_escape($admin?'Dobrý den, administrátore,':mm_salutation($o['buyer_name'])).'</p><h1 style="font-family:Georgia,serif;font-size:27px;font-weight:400">'.mm_escape($head).'</h1><p>'.mm_escape($intro).'</p><table role="presentation" style="width:100%;background:#fbf8f2;border-collapse:collapse">'.$rows.'</table>'.$extra.'<p style="margin-top:30px;font-size:13px;color:#696b63">S přáním krásného dne,<br><strong>Jiří Janoušek</strong><br>info@jirijanousek.cz<br>+420 777 796 148</p></td></tr><tr><td style="background:#e9e6dd;padding:15px 28px;font-size:11px;color:#737267">Tato zpráva se týká výhradně vaší objednávky. Nejde o reklamní sdělení.</td></tr></table></body></html>';
   return ['subject'=>$subject,'text'=>$plain,'html'=>$html];
