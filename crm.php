@@ -96,7 +96,6 @@ function mm_crm_archive_client(string $id,bool $archived): void {
  $q->execute([$archived?1:0,time(),$id]);
 }
 function mm_crm_add_inquiry(array $in,string $ip): string {
- mm_rate_limit('inquiry:'.$ip);
  // Legacy hidden spam field is ignored: some password managers mistakenly fill it.
  // CSRF, minimum message length and rate limiting remain active.
  if(($in['terms']??null)!==true)throw new InvalidArgumentException('Souhlas se zpracováním je nutný.');
@@ -108,6 +107,7 @@ function mm_crm_add_inquiry(array $in,string $ip): string {
  $subject=mm_text($in['subject']??'Dotaz k masáži',130,true,'Předmět zprávy');
  $msg=mm_text($in['message']??null,2500,true,'Vaše zpráva');
  if(strlen($msg)<10)throw new InvalidArgumentException('Zpráva je příliš krátká.');
+ mm_rate_limit('inquiry:'.$ip);
  $db=mm_db();$id=bin2hex(random_bytes(12));
  $db->exec('BEGIN IMMEDIATE');
  try{
