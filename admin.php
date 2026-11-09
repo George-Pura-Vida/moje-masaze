@@ -32,7 +32,7 @@ if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
   try{
    mm_rate_limit('admin:'.($_SERVER['REMOTE_ADDR']??'unknown'));
    $hash=get_hash();
-   if($hash!==''&&password_verify((string)($_POST['password']??''),$hash)){
+   if(hash_equals('jgjanousek@gmail.com',strtolower(trim((string)($_POST['email']??''))))&&$hash!==''&&password_verify((string)($_POST['password']??''),$hash)){
     session_regenerate_id(true);$_SESSION['mm_admin_auth']=true;redirect_admin('Přihlášení úspěšné.');
    }
    $alert='Neplatné heslo nebo není nastavené přihlášení.';http_response_code(401);
@@ -40,6 +40,9 @@ if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
  }elseif($authenticated){
   try{
    $action=(string)($_POST['action']??'');
+   if($action==='save_client'){$cid=mm_crm_save_client($_POST);redirect_admin('Klientský profil byl uložen.');}
+   if($action==='archive_client'||$action==='restore_client'){mm_crm_archive_client((string)($_POST['client_id']??''),$action==='archive_client');redirect_admin('Stav klientského profilu byl změněn.');}
+   if($action==='inquiry_status'){mm_crm_inquiry_status((string)($_POST['inquiry_id']??''),(string)($_POST['status']??''));redirect_admin('Zpráva byla zpracována.');}
    if($action==='add_block'){mm_block_create((string)($_POST['block_date']??''),(string)($_POST['block_start']??''),(string)($_POST['block_end']??''),(string)($_POST['block_note']??''));redirect_admin('Časová blokace byla vytvořena.');}
    if($action==='delete_block'){$blockId=filter_var($_POST['block_id']??null,FILTER_VALIDATE_INT);if(!$blockId||$blockId<1)throw new InvalidArgumentException('Neplatná blokace.');$delete=mm_db()->prepare('DELETE FROM massage_blocks WHERE id=?');$delete->execute([$blockId]);redirect_admin('Blokace byla zrušena.');}
    $order=mm_admin_update((string)($_POST['order_id']??''),$action,$_POST);
@@ -50,6 +53,22 @@ if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
  }
 }
 $authenticated=($_SESSION['mm_admin_auth']??false)===true;
+if($authenticated && ($_GET['export']??'')==='clients'){
+ try{
+  $db=mm_db();
+  $rows=$db->query("SELECT c.full_name,c.email,c.phone,c.notes,c.archived,COUNT(o.id) sessions,COALESCE(SUM(CASE WHEN o.status='paid' AND o.currency='CZK' THEN o.amount_cents ELSE 0 END),0) czk_paid_cents,COALESCE(SUM(CASE WHEN o.status='paid' AND o.currency='EUR' THEN o.amount_cents ELSE 0 END),0) eur_paid_cents FROM clients c LEFT JOIN orders o ON o.client_id=c.id GROUP BY c.id ORDER BY c.full_name")->fetchAll();
+  header('Content-Type: text/csv; charset=utf-8');
+  header('Content-Disposition: attachment; filename="moje-masaze-klienti.csv"');
+  echo "\xEF\xBB\xBF";
+  $stream=fopen('php://output','w');
+  fputcsv($stream,['Jméno','E-mail','Telefon','Poznámky','Archivovaný','Objednávky','CZK zaplaceno','EUR zaplaceno'],';');
+  foreach($rows as $row){
+   $fields=[$row['full_name'],$row['email'],$row['phone'],$row['notes'],$row['archived'],$row['sessions'],number_format((int)$row['czk_paid_cents']/100,2,'.',''),number_format((int)$row['eur_paid_cents']/100,2,'.','')];
+   $fields=array_map(static function($v){$v=(string)$v;return preg_match('/\A[\s]*[=+@-]/u',$v)?"'".$v:$v;},$fields);
+   fputcsv($stream,$fields,';');
+  }fclose($stream);exit;
+ }catch(Throwable $e){error_log('CRM export: '.get_class($e));http_response_code(503);exit('Export je dočasně nedostupný.');}
+}
 $notice=(string)($_GET['notice']??'');
 if(strlen($notice)>180)$notice='';
 $orders=[];$blocks=[];$calendarUrl='';$stats=['all'=>0,'paid'=>0,'pending'=>0,'gifts'=>0];
@@ -67,7 +86,7 @@ if($authenticated){
 }
 function h(mixed $s): string {return mm_escape($s);}
 ?>
-<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Správa objednávek • Moje masáže</title>
+<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Administrace · Klienti, kalendář a platby • Moje masáže</title>
 <style>
 :root{font-family:system-ui,Arial,sans-serif;color:#27372d;background:#f8f3ea}*{box-sizing:border-box}body{margin:0}header{background:#1c2a21;color:#fff;padding:19px 4vw;display:flex;gap:18px;align-items:center;justify-content:space-between;flex-wrap:wrap}h1,h2{font-family:Georgia,serif;font-weight:400;margin:0}h1{font-size:1.6rem}header a{color:#e4c28b;text-decoration:none}main{max-width:1300px;margin:36px auto;padding:0 20px}button,.button{border:0;border-radius:8px;padding:10px 16px;background:#2a422f;color:#fff;font-weight:700;cursor:pointer}button:hover{background:#36583d}.logout{background:#ffffff22}input,select{padding:10px;border-radius:7px;border:1px solid #d9cebb;font:inherit;min-width:0}label{font-size:.83rem;font-weight:600;display:grid;gap:5px}.login{max-width:410px;margin:35px auto;padding:25px;background:#fff;border:1px solid #e2d7c6;border-radius:15px}.login input{width:100%}.login button{width:100%;margin-top:19px}p{line-height:1.6}.notice{padding:12px 17px;margin:15px 0;background:#fff4d7;border-left:4px solid #b98c51;border-radius:6px}.error{background:#fff0ec;border-left-color:#b84d40}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin-bottom:24px}.stats>div{background:white;border:1px solid #eee1d1;padding:20px;border-radius:12px}.stats strong{display:block;font-size:1.8rem}.stats small{color:#636b62}table{width:100%;border-collapse:collapse;background:#fff;border-radius:14px;overflow:hidden;font-size:.83rem}thead th{text-align:left;background:#2b3c2e;color:#fff;padding:14px 12px}tbody td{padding:15px 12px;vertical-align:top;border-bottom:1px solid #e9e5df}tbody tr:nth-child(2n){background:#fcfaf6}td p{margin:3px 0;font-size:.78rem;color:#697265;overflow-wrap:anywhere}td strong{display:block}a{color:#845529}form.inline{display:flex;gap:6px;align-items:end;flex-wrap:wrap;margin:7px 0}form.inline button{font-size:.72rem;padding:9px 11px}form.inline input{max-width:130px;padding:7px}form.inline select{padding:7px} .tag{display:inline-block;background:#e5eee4;padding:3px 8px;border-radius:8px;font-size:.76rem}.pending{background:#f5e9ce}.muted{color:#6b736d}.scroll{overflow:auto;border-radius:14px;box-shadow:0 10px 32px #332b1a0b}footer{padding:35px 0;text-align:center;font-size:.78rem;color:#6f776e}@media(max-width:950px){.stats{grid-template-columns:repeat(2,1fr)}table{min-width:1080px}}@media(max-width:480px){.stats{grid-template-columns:1fr 1fr}} 
 </style></head>
@@ -78,7 +97,7 @@ function h(mixed $s): string {return mm_escape($s);}
 <?php if(!$authenticated):?>
 <section class="login"><h2>Přihlášení správce</h2><p>Vstup pouze pro provozovatele. Heslo se porovnává bezpečně na serveru; ukládá se pouze jeho hash.</p>
 <?php if(get_hash()===''):?><p class="notice error">Přihlášení není aktivované. Nastavte na serveru <code>MASSAGE_ADMIN_PASSWORD_HASH</code> nebo soukromý soubor <code>admin-hash.txt</code>.</p><?php endif;?>
-<form method="post"><input type="hidden" name="csrf" value="<?=h(mm_csrf())?>"><input type="hidden" name="action" value="login"><label>Heslo administrátora<input type="password" name="password" required autocomplete="current-password"></label><button type="submit">Přihlásit se</button></form></section>
+<form method="post"><input type="hidden" name="csrf" value="<?=h(mm_csrf())?>"><input type="hidden" name="action" value="login"><label>Administrátorský e-mail<input type="email" name="email" value="jgjanousek@gmail.com" autocomplete="username" required></label><label style="margin-top:12px">Heslo administrátora<input type="password" name="password" required autocomplete="current-password"></label><button type="submit">Přihlásit se</button></form></section>
 <?php else:?>
 <div class="stats"><div><strong><?=$stats['all']?></strong><small>Všechny objednávky</small></div><div><strong><?=$stats['paid']?></strong><small>Ověřeně uhrazené</small></div><div><strong><?=$stats['pending']?></strong><small>Čekají na platbu</small></div><div><strong><?=$stats['gifts']?></strong><small>Dárkové poukazy</small></div></div>
 <section style="background:white;border:1px solid #e5d8c8;padding:20px;border-radius:14px;margin:12px 0 25px">
@@ -98,6 +117,8 @@ function h(mixed $s): string {return mm_escape($s);}
 <span><?=h($b['block_date'])?> · <?=h($b['start_time'])?>–<?=h($b['end_time'])?> · <?=h($b['note'])?></span>
 <button name="action" value="delete_block" onclick="return confirm('Odstranit blokaci?')" style="padding:5px 9px">×</button></form><?php endforeach;?></div><?php endif;?>
 </section>
+<?php require __DIR__."/admin-panels.php"; ?>
+<div id="orders"></div>
 <h2>Posledních 200 objednávek</h2><p class="muted">Bankovní platbu potvrzuje výhradně Fio API. Správce zde mění pouze termín a čerpání poukazů.</p>
 <div class="scroll"><table><thead><tr><th>Objednávka</th><th>Klient</th><th>Služba</th><th>Úhrada</th><th>Správa</th></tr></thead><tbody>
 <?php foreach($orders as $o):?>
