@@ -101,6 +101,14 @@ CREATE TABLE IF NOT EXISTS rate (
  PRIMARY KEY(ip_hash,hour)
 );
 CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS massage_blocks (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ block_date TEXT NOT NULL,
+ start_time TEXT NOT NULL,
+ end_time TEXT NOT NULL,
+ note TEXT NOT NULL DEFAULT '',
+ created_at INTEGER NOT NULL
+);
 ");
   $columns=$db->query('PRAGMA table_info(orders)')->fetchAll(PDO::FETCH_ASSOC);
   $names=array_column($columns,'name');
@@ -176,6 +184,78 @@ function mm_quote(int $duration,int $quantity,string $currency): array {
  return ['amount_cents'=>(int)round($czk/$rate),'currency'=>'EUR','fx_rate'=>$rate,'iban'=>mm_eur_iban(),'bic'=>mm_eur_bic(),'account'=>mm_eur_iban()];
 }
 
+
+/**
+ * Public schedule is the local booking ledger, not a Google Calendar live-busy feed.
+ * Times are Europe/Prague; buffers between sessions prevent consecutive overlap.
+ */
+function mm_slot_interval(string $date,string $time,int $duration): array {
+ $zone=new DateTimeZone('Europe/Prague');
+ $day=DateTimeImmutable::createFromFormat('!Y-m-d',$date,$zone);
+ if(!$day||$day->format('Y-m-d')!==$date)throw new InvalidArgumentException('Neplatné datum rezervace.');
+ if(!preg_match('/\A(?:0[9]|1[0-9]):00\z/D',$time))throw new InvalidArgumentException('Neplatná hodina.');
+ if(!in_array($duration,[60,180],true))throw new InvalidArgumentException('Neplatná délka masáže.');
+ $start=DateTimeImmutable::createFromFormat('!Y-m-d H:i',$date.' '.$time,$zone);
+ if(!$start||$start->format('Y-m-d H:i')!==$date.' '.$time)throw new InvalidArgumentException('Neplatný čas.');
+ $end=$start->modify('+'.($duration+30).' minutes');
+ $min=$day->setTime(9,0);
+ $max=$day->setTime(20,0);
+ if($start<$min||$end>$max)throw new InvalidArgumentException('Zvolte čas v rozmezí 9:00–20:00 s rezervou mezi masážemi.');
+ if($day>new DateTimeImmutable('+365 days',$zone))throw new InvalidArgumentException('Termín je příliš vzdálený.');
+ return [$start->getTimestamp(),$end->getTimestamp()];
+}
+function mm_slot_is_free(string $date,string $time,int $duration,string $ignoreId=''): bool {
+ try{[$begin,$end]=mm_slot_interval($date,$time,$duration);}
+ catch(InvalidArgumentException $e){return false;}
+ $db=mm_db();
+ $q=$db->prepare("SELECT id,status,created_at,duration,preferred_date,preferred_time,confirmed_date,confirmed_time,appointment_status
+  FROM orders WHERE (preferred_date=? OR confirmed_date=?) AND appointment_status NOT IN ('cancelled','completed')");
+ $q->execute([$date,$date]);
+ $now=time();
+ foreach($q->fetchAll() as $o){
+  if($o['id']===$ignoreId)continue;
+  if($o['confirmed_date']!==''&&$o['confirmed_time']!==''){
+   $otherDate=$o['confirmed_date'];$otherTime=$o['confirmed_time'];
+  }else{
+   // Pending payment holds a new slot only for 24 hours.
+   // Paid orders and approved visits continue blocking until completed/cancelled.
+   if($o['status']!=='paid'&&$o['appointment_status']!=='confirmed'&&$now-(int)$o['created_at']>86400)continue;
+   $otherDate=$o['preferred_date'];$otherTime=$o['preferred_time'];
+  }
+  if($otherDate!==$date||$otherTime==='')continue;
+  try{[$otherBegin,$otherEnd]=mm_slot_interval($otherDate,$otherTime,(int)$o['duration']);}
+  catch(InvalidArgumentException $e){continue;}
+  if($begin<$otherEnd && $end>$otherBegin)return false;
+ }
+ $blocked=$db->prepare('SELECT start_time,end_time FROM massage_blocks WHERE block_date=?');$blocked->execute([$date]);
+ foreach($blocked->fetchAll() as $row){
+  $s=strtotime($date.' '.$row['start_time'].' Europe/Prague');
+  $e=strtotime($date.' '.$row['end_time'].' Europe/Prague');
+  if($s!==false&&$e!==false&&$begin<$e&&$end>$s)return false;
+ }
+ return true;
+}
+function mm_slot_list(string $date,int $duration): array {
+ $zone=new DateTimeZone('Europe/Prague');
+ $day=DateTimeImmutable::createFromFormat('!Y-m-d',$date,$zone);
+ if(!$day||$day->format('Y-m-d')!==$date||$day<new DateTimeImmutable('today',$zone)||$day>new DateTimeImmutable('+365 days',$zone))throw new InvalidArgumentException('Vyberte datum během příštích 12 měsíců.');
+ if(!in_array($duration,[60,180],true))throw new InvalidArgumentException('Neplatná délka masáže.');
+ $out=[];$now=new DateTimeImmutable('now',$zone);
+ foreach(range(9,19) as $hour){
+  $time=sprintf('%02d:00',$hour);
+  [$begin,$end]=[null,null];
+  try{[$begin,$end]=mm_slot_interval($date,$time,$duration);}catch(InvalidArgumentException $e){continue;}
+  $out[]=['time'=>$time,'available'=>($begin>$now->getTimestamp()+3600)&&mm_slot_is_free($date,$time,$duration)];
+ }
+ return $out;
+}
+function mm_block_create(string $date,string $start,string $end,string $note=''): void {
+ $d=DateTimeImmutable::createFromFormat('!Y-m-d',$date,new DateTimeZone('Europe/Prague'));
+ if(!$d||$d->format('Y-m-d')!==$date||!preg_match('/\A(?:0[0-9]|1[0-9]|2[0-3]):(?:00|30)\z/D',$start)||!preg_match('/\A(?:0[0-9]|1[0-9]|2[0-3]):(?:00|30)\z/D',$end)||$end<=$start)throw new InvalidArgumentException('Neplatná časová blokace.');
+ $q=mm_db()->prepare('INSERT INTO massage_blocks(block_date,start_time,end_time,note,created_at) VALUES(?,?,?,?,?)');
+ $q->execute([$date,$start,$end,mm_text($note,100),time()]);
+}
+
 function mm_csrf(): string {
   if(session_status()!==PHP_SESSION_ACTIVE)session_start();
   if(empty($_SESSION['mm_csrf']))$_SESSION['mm_csrf']=bin2hex(random_bytes(24));
@@ -228,14 +308,18 @@ function mm_create_order(array $in,string $ip): array {
   $note=mm_text($in['note']??'',650);
   $prefDate=mm_text($in['date']??'',10);
   $prefTime=mm_text($in['time']??'',5);
-  if($kind==='gift'){$prefDate='';$prefTime='';}
   if($prefDate!==''){
     $date=DateTimeImmutable::createFromFormat('!Y-m-d',$prefDate,new DateTimeZone('Europe/Prague'));
     if(!$date||$date->format('Y-m-d')!==$prefDate||$date<new DateTimeImmutable('today',new DateTimeZone('Europe/Prague'))||$date>new DateTimeImmutable('+1 year',new DateTimeZone('Europe/Prague')))throw new InvalidArgumentException('Neplatný termín.');
   }
   if($prefTime!==''&&!preg_match('/\A(?:09|10|11|12|13|14|15|16|17|18|19):00\z/D',$prefTime))throw new InvalidArgumentException('Neplatná hodina.');
+  if($prefTime!==''&&$prefDate==='')throw new InvalidArgumentException('Pro hodinu zvolte také datum.');
   $lang=$in['lang']??'cs';if(!in_array($lang,['cs','sk','en','es','zh'],true))$lang='cs';
   $db=mm_db();$id=bin2hex(random_bytes(12));$token=bin2hex(random_bytes(24));
+  if($prefDate!==''&&$prefTime!==''){if(!mm_slot_is_free($prefDate,$prefTime,$duration))throw new InvalidArgumentException('Vybraný čas již není volný. Zvolte prosím jiný.');}
+  $db->exec('BEGIN IMMEDIATE');
+  try {
+  if($prefDate!==''&&$prefTime!==''&&!mm_slot_is_free($prefDate,$prefTime,$duration))throw new InvalidArgumentException('Vybraný čas právě obsadil jiný klient. Vyberte další termín.');
   for($i=0;$i<20;$i++){
     $vs='57'.(string)random_int(10000000,99999999);
     try{
@@ -248,6 +332,8 @@ function mm_create_order(array $in,string $ip): array {
     }
   }
   mm_queue($id,'new_client');mm_queue($id,'new_admin');
+  $db->commit();
+  }catch(Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
   return ['id'=>$id,'token'=>$token,'vs'=>$vs,'amount'=>$amount/100,'kind'=>$kind,'currency'=>$currency,'iban'=>$quote['iban'],'bic'=>$quote['bic'],'account'=>$quote['account']];
 }
 function mm_queue(string $id,string $kind): void {
