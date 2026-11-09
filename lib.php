@@ -215,6 +215,10 @@ function mm_create_order(array $in,string $ip): array {
   if(!is_string($currency))throw new InvalidArgumentException('Neplatná měna.');
   $quote=mm_quote($duration,$quantity,$currency);
   $amount=$quote['amount_cents'];
+  if(isset($in['expected_amount_cents'])){
+    $expected=filter_var($in['expected_amount_cents'],FILTER_VALIDATE_INT);
+    if($expected===false||$expected!==$amount)throw new InvalidArgumentException('Cena se od zobrazení změnila. Aktualizujte objednávku a potvrďte novou cenu.');
+  }
   $name=mm_text($in['name']??null,120,true);
   $email=mm_text($in['email']??null,254,true);
   if(!filter_var($email,FILTER_VALIDATE_EMAIL))throw new InvalidArgumentException('Zadejte platný e-mail.');
