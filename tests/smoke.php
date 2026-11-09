@@ -54,4 +54,34 @@ for($i=1;$i<=3;$i++){
 }
 try{mm_admin_update($gift['id'],'redeem',[]);throw new RuntimeException('FAIL: overredeemed gift');}catch(InvalidArgumentException $e){check(true,'paid gift cannot be redeemed beyond purchased count');}
 
+$slotDay=(new DateTimeImmutable('+5 days',new DateTimeZone('Europe/Prague')))->format('Y-m-d');
+$first=mm_create_order([...$input,'count'=>'1','date'=>$slotDay,'time'=>'11:00'],'192.0.2.5');
+check((float)$first['amount']===2000.0,'specific 60-minute appointment saved');
+$open=mm_slot_list($slotDay,60);
+$at11=array_values(array_filter($open,static fn($x)=>$x['time']==='11:00'));
+check(count($at11)===1&&!$at11[0]['available'],'selected slot is reserved');
+try{
+ mm_create_order([...$input,'count'=>'1','date'=>$slotDay,'time'=>'11:00'],'192.0.2.6');
+ throw new RuntimeException('FAIL: double booking accepted');
+}catch(InvalidArgumentException $e){check(true,'double booking is rejected');}
+try{
+ mm_create_order([...$input,'count'=>'1','date'=>$slotDay,'time'=>'12:00'],'192.0.2.7');
+ throw new RuntimeException('FAIL: overlapping massage accepted');
+}catch(InvalidArgumentException $e){check(true,'overlapping booking and transition buffer are rejected');}
+$giftSchedule=(new DateTimeImmutable('+6 days',new DateTimeZone('Europe/Prague')))->format('Y-m-d');
+$giftConfirmed=mm_admin_update($gift['id'],'schedule_gift',['confirmed_date'=>$giftSchedule,'confirmed_time'=>'14:00']);
+check($giftConfirmed['appointment_status']==='confirmed'&&$giftConfirmed['confirmed_time']==='14:00','admin can confirm a paid gift voucher date and hour');
+require_once dirname(__DIR__).'/coupon.php';
+$printed=mm_coupon_html($giftConfirmed,false);
+check(str_contains($printed,'Gift Person')&&str_contains($printed,'14:00')&&str_contains($printed,'voucher-qr.php'),'printable coupon includes recipient, time and entry QR image');
+$emailCoupon=mm_mail_template($giftConfirmed,'paid_client');
+check(str_contains($emailCoupon['html'],'cid:mm-gift-qr@moje-masaze'),'paid gift email embeds the QR code');
+check(str_contains($emailCoupon['html'],'Gift Person'),'paid gift email includes recipient name');
+require_once dirname(__DIR__).'/vendor/php-qrcode.php';
+$qr=new QRCode('https://moje-masaze.jirijanousek.cz/checkin.php?code='.str_repeat('a',48),['s'=>'qrm']);
+$svg=$qr->render_svg();
+check(str_contains($svg,'<svg')&&str_contains($svg,'<path'),'server generates entry QR SVG without GD');
+$key=mm_calendar_secret();
+check(preg_match('/\A[a-f0-9]{64}\z/D',$key)===1,'private calendar feed key created securely');
+
 echo "All smoke tests passed.\n";
