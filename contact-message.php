@@ -17,5 +17,14 @@ try{
  try{mm_crm_dispatch_inquiries(8);}catch(Throwable $e){error_log('MM contact mail queue: '.get_class($e));}
  mm_json(201,['ok'=>true,'message'=>'Zpráva je uložená. Potvrzení odesíláme e-mailem.']);
 }catch(InvalidArgumentException $e){mm_json(422,['error'=>$e->getMessage()]);}
-catch(RuntimeException $e){mm_json(429,['error'=>'Příliš mnoho zpráv. Zkuste to později.']);}
-catch(Throwable $e){error_log('MM inquiry: '.get_class($e));mm_json(503,['error'=>'Zprávu nelze právě uložit. Zkuste to později.']);}
+catch(PDOException $e){
+ error_log('MM contact database: '.get_class($e).' '.substr($e->getMessage(),0,200));
+ mm_json(503,['error'=>'Databáze zpráv není dostupná. Ověřte stav serveru v system-status.php.','code'=>'database_write']);
+}catch(RuntimeException $e){
+ $limited=str_contains($e->getMessage(),'Příliš mnoho požadavků');
+ error_log('MM contact runtime: '.get_class($e).' '.substr($e->getMessage(),0,150));
+ mm_json($limited?429:503,['error'=>$limited?'Příliš mnoho pokusů. Zkuste to později.':'Úložiště zpráv není dostupné. Zkontrolujte system-status.php.','code'=>$limited?'rate_limited':'storage_unavailable']);
+}catch(Throwable $e){
+ $rid=bin2hex(random_bytes(4));error_log('MM contact '.$rid.': '.get_class($e).' '.substr($e->getMessage(),0,180));
+ mm_json(503,['error'=>'Zprávu nelze právě uložit. Provozovatel může ověřit diagnostiku serveru.','code'=>'contact_server_failure','reference'=>$rid]);
+}
