@@ -43,6 +43,8 @@ CREATE TABLE IF NOT EXISTS orders (
  amount_cents INTEGER NOT NULL,
  currency TEXT NOT NULL DEFAULT 'CZK',
  fx_rate REAL NOT NULL DEFAULT 1,
+ bank_iban TEXT NOT NULL DEFAULT '',
+ bank_bic TEXT NOT NULL DEFAULT '',
  buyer_name TEXT NOT NULL,
  email TEXT NOT NULL,
  phone TEXT NOT NULL,
@@ -82,6 +84,8 @@ CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
   $names=array_column($columns,'name');
   if(!in_array('currency',$names,true))$db->exec("ALTER TABLE orders ADD COLUMN currency TEXT NOT NULL DEFAULT 'CZK'");
   if(!in_array('fx_rate',$names,true))$db->exec("ALTER TABLE orders ADD COLUMN fx_rate REAL NOT NULL DEFAULT 1");
+  if(!in_array('bank_iban',$names,true))$db->exec("ALTER TABLE orders ADD COLUMN bank_iban TEXT NOT NULL DEFAULT ''");
+  if(!in_array('bank_bic',$names,true))$db->exec("ALTER TABLE orders ADD COLUMN bank_bic TEXT NOT NULL DEFAULT ''");
   if(!in_array('appointment_status',$names,true))$db->exec("ALTER TABLE orders ADD COLUMN appointment_status TEXT NOT NULL DEFAULT 'requested'");
   if(!in_array('confirmed_date',$names,true))$db->exec("ALTER TABLE orders ADD COLUMN confirmed_date TEXT NOT NULL DEFAULT ''");
   if(!in_array('confirmed_time',$names,true))$db->exec("ALTER TABLE orders ADD COLUMN confirmed_time TEXT NOT NULL DEFAULT ''");
@@ -209,8 +213,8 @@ function mm_create_order(array $in,string $ip): array {
   for($i=0;$i<20;$i++){
     $vs='57'.(string)random_int(10000000,99999999);
     try{
-      $q=$db->prepare("INSERT INTO orders (id,token,vs,kind,focus,duration,quantity,amount_cents,currency,fx_rate,buyer_name,email,phone,recipient,preferred_date,preferred_time,note,lang,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
-      $q->execute([$id,$token,$vs,$kind,$focus,$duration,$quantity,$amount,$currency,$quote['fx_rate'],$name,$email,$phone,$recipient,$prefDate,$prefTime,$note,$lang,time()]);
+      $q=$db->prepare("INSERT INTO orders (id,token,vs,kind,focus,duration,quantity,amount_cents,currency,fx_rate,bank_iban,bank_bic,buyer_name,email,phone,recipient,preferred_date,preferred_time,note,lang,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+      $q->execute([$id,$token,$vs,$kind,$focus,$duration,$quantity,$amount,$currency,$quote['fx_rate'],$quote['iban'],$quote['bic'],$name,$email,$phone,$recipient,$prefDate,$prefTime,$note,$lang,time()]);
       break;
     }catch(PDOException $e){
       if(str_contains($e->getMessage(),'UNIQUE constraint failed: orders.vs')&&$i<19)continue;
@@ -259,11 +263,11 @@ function mm_mail_template(array $o,string $kind): array {
   if($paid&&$gift&&!$admin)$intro.=' Váš poukaz můžete otevřít a vytisknout zde: '.$url;
   $plain=($admin?'Dobrý den, administrátore,':mm_salutation($o['buyer_name']))."\n\n".$head."\n\n".$intro."\n";
   foreach($fields as $key=>$value)$plain.=$key.': '.$value."\n";
-  if(!$paid)$plain.="Účet/IBAN: ".(($o['currency']??'CZK')==='EUR'?mm_eur_iban():MM_ACCOUNT)."\nIBAN: ".(($o['currency']??'CZK')==='EUR'?mm_eur_iban():MM_IBAN)."\n";
+  if(!$paid)$plain.="Účet/IBAN: ".(($o['currency']??'CZK')==='EUR'?($o['bank_iban']?:mm_eur_iban()):MM_ACCOUNT)."\nIBAN: ".(($o['currency']??'CZK')==='EUR'?($o['bank_iban']?:mm_eur_iban()):MM_IBAN)."\n";
   $plain.="\nJiří Janoušek | Moje masáže\ninfo@jirijanousek.cz\n";
   $rows='';foreach($fields as $key=>$value){$rows.='<tr><td style="padding:10px;border-bottom:1px solid #eee4d6;color:#6c6a61">'.mm_escape($key).'</td><td style="padding:10px;border-bottom:1px solid #eee4d6;color:#2e382f;font-weight:700">'.mm_escape($value).'</td></tr>';}
   $extra='';
-  if(!$paid)$extra='<p style="background:#f9f2e5;padding:15px;border-radius:9px">Před potvrzením úhrady zkontrolujte měnu, částku, účet <strong>'.mm_escape(($o['currency']??'CZK')==='EUR'?mm_eur_iban():MM_ACCOUNT).'</strong> a VS <strong>'.mm_escape($o['vs']).'</strong>. U EUR platby uveďte také referenci MMVS-'.mm_escape($o['vs']).' ve zprávě pro příjemce. Samotný QR kód není dokladem platby.</p>';
+  if(!$paid)$extra='<p style="background:#f9f2e5;padding:15px;border-radius:9px">Před potvrzením úhrady zkontrolujte měnu, částku, účet <strong>'.mm_escape(($o['currency']??'CZK')==='EUR'?($o['bank_iban']?:mm_eur_iban()):MM_ACCOUNT).'</strong> a VS <strong>'.mm_escape($o['vs']).'</strong>. U EUR platby uveďte také referenci MMVS-'.mm_escape($o['vs']).' ve zprávě pro příjemce. Samotný QR kód není dokladem platby.</p>';
   if($paid&&$gift&&!$admin)$extra='<p style="margin:26px 0"><a href="'.mm_escape($url).'" style="background:#aa7d47;color:#fff;padding:13px 24px;text-decoration:none;border-radius:8px;font-weight:700">🎁 Zobrazit dárkový poukaz</a></p>';
   $html='<!doctype html><html lang="cs"><head><meta charset="utf-8"></head><body style="background:#f6f1e8;margin:0;padding:24px 10px;font-family:Arial,Helvetica,sans-serif;color:#273227"><table role="presentation" style="max-width:640px;width:100%;border-collapse:collapse;margin:auto;background:#fff;border:1px solid #e4d8c7"><tr><td style="padding:29px;background:#1d2a21;color:#fff;border-bottom:5px solid #c7a06d"><div style="font-family:Georgia,serif;font-size:27px;color:#e8c99d">❁ DOTYK &amp; KLID</div><div style="font-size:12px;letter-spacing:2px;color:#e5e6da">MOJE MASÁŽE • JIŘÍ JANOUŠEK</div></td></tr><tr><td style="padding:28px"><p>'.mm_escape($admin?'Dobrý den, administrátore,':mm_salutation($o['buyer_name'])).'</p><h1 style="font-family:Georgia,serif;font-size:27px;font-weight:400">'.mm_escape($head).'</h1><p>'.mm_escape($intro).'</p><table role="presentation" style="width:100%;background:#fbf8f2;border-collapse:collapse">'.$rows.'</table>'.$extra.'<p style="margin-top:30px;font-size:13px;color:#696b63">S přáním krásného dne,<br><strong>Jiří Janoušek</strong><br>info@jirijanousek.cz<br>+420 777 796 148</p></td></tr><tr><td style="background:#e9e6dd;padding:15px 28px;font-size:11px;color:#737267">Tato zpráva se týká výhradně vaší objednávky. Nejde o reklamní sdělení.</td></tr></table></body></html>';
   return ['subject'=>$subject,'text'=>$plain,'html'=>$html];
