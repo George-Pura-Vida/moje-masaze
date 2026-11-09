@@ -15,11 +15,23 @@ header('X-Frame-Options: SAMEORIGIN');
 <meta name="description" content="Osobní celostní, relaxační a regenerační masáže. Jiří Janoušek, kvalifikovaný masér. Vstupní konzultace, individuální péče a dárkové poukazy.">
 <meta name="mm-csrf" content="<?=htmlspecialchars($_SESSION['mm_csrf'],ENT_QUOTES,'UTF-8')?>">
 <title>Moje masáže | Dotyk & klid • Jiří Janoušek</title>
+<link rel="canonical" href="https://moje-masaze.jirijanousek.cz/">
+<link rel="alternate" hreflang="cs" href="https://moje-masaze.jirijanousek.cz/?lang=cs">
+<link rel="alternate" hreflang="sk" href="https://moje-masaze.jirijanousek.cz/?lang=sk">
+<link rel="alternate" hreflang="en" href="https://moje-masaze.jirijanousek.cz/?lang=en">
+<link rel="alternate" hreflang="es" href="https://moje-masaze.jirijanousek.cz/?lang=es">
+<link rel="alternate" hreflang="zh-Hans" href="https://moje-masaze.jirijanousek.cz/?lang=zh">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="cs_CZ">
+<meta property="og:title" content="Moje masáže | Dotyk & klid">
+<meta property="og:description" content="Celostní, relaxační a regenerační masáže Jiří Janoušek. Objednejte si svůj čas pro klid nebo darujte masážní poukaz.">
+<meta property="og:url" content="https://moje-masaze.jirijanousek.cz/">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"ProfessionalService","name":"Moje masáže – Jiří Janoušek","url":"https://moje-masaze.jirijanousek.cz/","description":"Masérské, rekondiční a regenerační služby. Celostní relaxační masáže a poukazy.","email":"info@jirijanousek.cz","priceRange":"2000–3000 CZK","areaServed":{"@type":"City","name":"Praha"}}</script>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=1">
-<script type="module" src="app.js?v=1"></script>
+<link rel="stylesheet" href="style.css?v=20261109-final">
+<script type="module" src="app.js?v=20261109-final"></script>
 </head>
 <body>
 <a class="skip" href="#main">Přejít na obsah</a>
