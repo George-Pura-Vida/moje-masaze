@@ -21,5 +21,7 @@ jobs:
           node --check app.js
           node --check i18n.js
           for f in i18n-*.js; do node --check "$f"; done
+      - name: Deployment script syntax
+        run: bash -n cron/auto-deploy.sh
       - name: Translation integrity
         run: node --test tests/translations.test.mjs
