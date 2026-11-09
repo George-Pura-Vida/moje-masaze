@@ -110,6 +110,16 @@ file_put_contents($cache,json_encode(['rate'=>25.0,'date'=>'test']));
 putenv('MASSAGE_EUR_ENABLED=1');
 $eurQuote=mm_quote(60,1,'EUR');
 check($eurQuote['iban']===MM_IBAN && $eurQuote['amount_cents']===8000,'EUR quotes match Fio IBAN and validated reference rate');
+check(mm_money($eurQuote['amount_cents'],'EUR')==='80 €','whole EUR shows no decimal places');
+file_put_contents($cache,json_encode(['rate'=>24.36,'date'=>'test']));
+$roundedQuote=mm_quote(60,1,'EUR');
+check($roundedQuote['amount_cents']===8200,'2000 CZK divided by 24.36 rounds to exactly 82 EUR');
+check(mm_money($roundedQuote['amount_cents'],'EUR')==='82 €','rounded EUR is displayed without cents');
+check(mm_quote(180,1,'EUR')['amount_cents']===12300,'3000 CZK rounds to whole EUR');
+check(mm_quote(60,2,'EUR')['amount_cents']===15600,'discounted package rounds to whole EUR');
+check(mm_quote(60,3,'EUR')['amount_cents']===22200,'three-visit package rounds to whole EUR');
+try{mm_create_order([...$input,'currency'=>'EUR','count'=>'1','expected_amount_cents'=>8210],'192.0.2.190');throw new RuntimeException('FAIL: mismatched EUR quote accepted');}catch(InvalidArgumentException $e){check(true,'order rejects obsolete cents quote');}
+file_put_contents($cache,json_encode(['rate'=>25.0,'date'=>'test']));
 $eurOrder=mm_create_order([...$input,'currency'=>'EUR','count'=>'1','expected_amount_cents'=>8000],'192.0.2.19');
 check($eurOrder['currency']==='EUR' && $eurOrder['iban']===MM_IBAN && (float)$eurOrder['amount']===80.0,'EUR order is saved with correct SEPA IBAN');
 $q=mm_db()->prepare('SELECT status FROM orders WHERE id=?');$q->execute([$eurOrder['id']]);
