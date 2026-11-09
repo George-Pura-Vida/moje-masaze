@@ -18,5 +18,14 @@ try{
  try{mm_dispatch_mail(8);}catch(Throwable $e){error_log('MM order mail dispatcher: '.get_class($e));}
  mm_json(201,$order);
 }catch(InvalidArgumentException $e){mm_json(422,['error'=>$e->getMessage()]);}
-catch(RuntimeException $e){error_log('MM order runtime: '.get_class($e));mm_json(503,['error'=>'Objednávku nyní nelze zpracovat. Zkuste to prosím později.']);}
-catch(Throwable $e){error_log('MM order error: '.get_class($e));mm_json(500,['error'=>'Objednávku se nyní nepodařilo uložit.']);}
+catch(PDOException $e){
+ error_log('MM order database: '.get_class($e).' '.substr($e->getMessage(),0,200));
+ mm_json(503,['error'=>'Databáze objednávek není dostupná. Ověřte stav serveru v system-status.php.','code'=>'database_write']);
+}catch(RuntimeException $e){
+ $limited=str_contains($e->getMessage(),'Příliš mnoho požadavků');
+ error_log('MM order runtime: '.get_class($e).' '.substr($e->getMessage(),0,150));
+ mm_json($limited?429:503,['error'=>$limited?'Příliš mnoho pokusů. Zkuste to později.':'Úložiště objednávek není dostupné. Zkontrolujte system-status.php.','code'=>$limited?'rate_limited':'storage_unavailable']);
+}catch(Throwable $e){
+ $rid=bin2hex(random_bytes(4));error_log('MM order '.$rid.': '.get_class($e).' '.substr($e->getMessage(),0,180));
+ mm_json(503,['error'=>'Objednávku nelze právě uložit. Provozovatel může ověřit diagnostiku serveru.','code'=>'order_server_failure','reference'=>$rid]);
+}
