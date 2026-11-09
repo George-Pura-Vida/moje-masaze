@@ -121,6 +121,9 @@ CREATE TABLE IF NOT EXISTS massage_blocks (
   if(!in_array('confirmed_time',$names,true))$db->exec("ALTER TABLE orders ADD COLUMN confirmed_time TEXT NOT NULL DEFAULT ''");
   if(!in_array('redeemed_count',$names,true))$db->exec("ALTER TABLE orders ADD COLUMN redeemed_count INTEGER NOT NULL DEFAULT 0");
   if(!in_array('redeemed_at',$names,true))$db->exec("ALTER TABLE orders ADD COLUMN redeemed_at INTEGER");
+  if(!in_array('client_id',$names,true))$db->exec("ALTER TABLE orders ADD COLUMN client_id TEXT NOT NULL DEFAULT ''");
+  require_once __DIR__.'/crm.php';
+  mm_crm_migrate($db);
   @chmod($file,0600);
   return $db;
 }
@@ -335,12 +338,13 @@ function mm_create_order(array $in,string $ip): array {
   if($prefDate!==''&&$prefTime!==''){if(!mm_slot_is_free($prefDate,$prefTime,$duration))throw new InvalidArgumentException('Vybraný čas již není volný. Zvolte prosím jiný.');}
   $db->exec('BEGIN IMMEDIATE');
   try {
+  $clientId=mm_crm_upsert_client($db,$name,$email,$phone,time());
   if($prefDate!==''&&$prefTime!==''&&!mm_slot_is_free($prefDate,$prefTime,$duration))throw new InvalidArgumentException('Vybraný čas právě obsadil jiný klient. Vyberte další termín.');
   for($i=0;$i<20;$i++){
     $vs='57'.(string)random_int(10000000,99999999);
     try{
-      $q=$db->prepare("INSERT INTO orders (id,token,vs,kind,focus,duration,quantity,amount_cents,currency,fx_rate,bank_iban,bank_bic,buyer_name,email,phone,recipient,preferred_date,preferred_time,note,lang,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
-      $q->execute([$id,$token,$vs,$kind,$focus,$duration,$quantity,$amount,$currency,$quote['fx_rate'],$quote['iban'],$quote['bic'],$name,$email,$phone,$recipient,$prefDate,$prefTime,$note,$lang,time()]);
+      $q=$db->prepare("INSERT INTO orders (id,token,vs,kind,focus,duration,quantity,amount_cents,currency,fx_rate,bank_iban,bank_bic,buyer_name,email,phone,recipient,preferred_date,preferred_time,note,lang,created_at,client_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+      $q->execute([$id,$token,$vs,$kind,$focus,$duration,$quantity,$amount,$currency,$quote['fx_rate'],$quote['iban'],$quote['bic'],$name,$email,$phone,$recipient,$prefDate,$prefTime,$note,$lang,time(),$clientId]);
       break;
     }catch(PDOException $e){
       if(str_contains($e->getMessage(),'UNIQUE constraint failed: orders.vs')&&$i<19)continue;
