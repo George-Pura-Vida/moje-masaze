@@ -40,9 +40,11 @@ if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
  }elseif($authenticated){
   try{
    $action=(string)($_POST['action']??'');
+   if($action==='add_block'){mm_block_create((string)($_POST['block_date']??''),(string)($_POST['block_start']??''),(string)($_POST['block_end']??''),(string)($_POST['block_note']??''));redirect_admin('Časová blokace byla vytvořena.');}
+   if($action==='delete_block'){$blockId=filter_var($_POST['block_id']??null,FILTER_VALIDATE_INT);if(!$blockId||$blockId<1)throw new InvalidArgumentException('Neplatná blokace.');$delete=mm_db()->prepare('DELETE FROM massage_blocks WHERE id=?');$delete->execute([$blockId]);redirect_admin('Blokace byla zrušena.');}
    $order=mm_admin_update((string)($_POST['order_id']??''),$action,$_POST);
    $notice='Změna byla uložena.';
-   if(in_array($action,['confirm','cancel'],true)&&!mm_appointment_notice($order,$action))$notice='Změna je uložená, ale odeslání e-mailu se nezdařilo. Kontaktujte klienta osobně.';
+   if(in_array($action,['confirm','schedule_gift','cancel'],true)&&!mm_appointment_notice($order,$action))$notice='Změna je uložená, ale odeslání e-mailu se nezdařilo. Kontaktujte klienta osobně.';
    redirect_admin($notice);
   }catch(Throwable $e){$alert=$e instanceof InvalidArgumentException?$e->getMessage():'Změnu se nepodařilo uložit.';http_response_code(422);}
  }
@@ -50,11 +52,13 @@ if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
 $authenticated=($_SESSION['mm_admin_auth']??false)===true;
 $notice=(string)($_GET['notice']??'');
 if(strlen($notice)>180)$notice='';
-$orders=[];$stats=['all'=>0,'paid'=>0,'pending'=>0,'gifts'=>0];
+$orders=[];$blocks=[];$calendarUrl='';$stats=['all'=>0,'paid'=>0,'pending'=>0,'gifts'=>0];
 if($authenticated){
  try{
   $db=mm_db();
   $orders=$db->query('SELECT * FROM orders ORDER BY created_at DESC LIMIT 200')->fetchAll();
+  $blocks=$db->query('SELECT * FROM massage_blocks WHERE block_date>=date(\'now\') ORDER BY block_date,start_time LIMIT 100')->fetchAll();
+  $calendarUrl='https://moje-masaze.jirijanousek.cz/calendar-feed.php?key='.rawurlencode(mm_calendar_secret());
   $stats['all']=(int)$db->query('SELECT COUNT(*) FROM orders')->fetchColumn();
   $stats['paid']=(int)$db->query("SELECT COUNT(*) FROM orders WHERE status='paid'")->fetchColumn();
   $stats['pending']=(int)$db->query("SELECT COUNT(*) FROM orders WHERE status='pending'")->fetchColumn();
@@ -77,6 +81,23 @@ function h(mixed $s): string {return mm_escape($s);}
 <form method="post"><input type="hidden" name="csrf" value="<?=h(mm_csrf())?>"><input type="hidden" name="action" value="login"><label>Heslo administrátora<input type="password" name="password" required autocomplete="current-password"></label><button type="submit">Přihlásit se</button></form></section>
 <?php else:?>
 <div class="stats"><div><strong><?=$stats['all']?></strong><small>Všechny objednávky</small></div><div><strong><?=$stats['paid']?></strong><small>Ověřeně uhrazené</small></div><div><strong><?=$stats['pending']?></strong><small>Čekají na platbu</small></div><div><strong><?=$stats['gifts']?></strong><small>Dárkové poukazy</small></div></div>
+<section style="background:white;border:1px solid #e5d8c8;padding:20px;border-radius:14px;margin:12px 0 25px">
+<h2 style="margin:0 0 12px">📆 Rezervační kalendář</h2>
+<p>Volné termíny na webu se kontrolují proti těmto rezervacím a časovým blokacím. Propojení s Google Kalendářem funguje formou soukromého odběru potvrzených termínů; obsazenost vašeho osobního Google Kalendáře se zpět na web automaticky nepřenáší.</p>
+<?php if($calendarUrl!==''):?><p><strong>Soukromý odkaz pro Google Kalendář:</strong> <a href="<?=h($calendarUrl)?>" rel="nofollow">Otevřít kalendářový soubor .ics</a></p>
+<details><summary>Zobrazit odkaz pro odběr v Google Kalendáři</summary><input type="text" readonly onclick="this.select()" style="width:100%" value="<?=h($calendarUrl)?>"><small>Odkaz je tajný. V Google Kalendáři zvolte Jiné kalendáře → Z adresy URL a vložte jej. Synchronizace Google může být opožděná.</small></details><?php endif;?>
+<h3 style="margin:20px 0 10px">Blokovat obsazený čas</h3><form method="post" class="inline" style="background:#f8f3eb;padding:13px;border-radius:9px">
+<input type="hidden" name="csrf" value="<?=h(mm_csrf())?>">
+<label>Datum<input type="date" name="block_date" required></label>
+<label>Od<input type="time" name="block_start" value="09:00" step="1800" required></label>
+<label>Do<input type="time" name="block_end" value="10:00" step="1800" required></label>
+<label>Důvod (volitelně)<input type="text" name="block_note" maxlength="100"></label>
+<button name="action" value="add_block">+ Přidat blokaci</button></form>
+<?php if($blocks):?><div style="display:flex;flex-wrap:wrap;gap:9px;margin:12px 0"><?php foreach($blocks as $b):?><form method="post" style="background:#f1e8d8;padding:8px;border-radius:8px">
+<input type="hidden" name="csrf" value="<?=h(mm_csrf())?>"><input type="hidden" name="block_id" value="<?=h($b['id'])?>">
+<span><?=h($b['block_date'])?> · <?=h($b['start_time'])?>–<?=h($b['end_time'])?> · <?=h($b['note'])?></span>
+<button name="action" value="delete_block" onclick="return confirm('Odstranit blokaci?')" style="padding:5px 9px">×</button></form><?php endforeach;?></div><?php endif;?>
+</section>
 <h2>Posledních 200 objednávek</h2><p class="muted">Bankovní platbu potvrzuje výhradně Fio API. Správce zde mění pouze termín a čerpání poukazů.</p>
 <div class="scroll"><table><thead><tr><th>Objednávka</th><th>Klient</th><th>Služba</th><th>Úhrada</th><th>Správa</th></tr></thead><tbody>
 <?php foreach($orders as $o):?>
@@ -89,14 +110,20 @@ function h(mixed $s): string {return mm_escape($s);}
 <span class="tag"><?=h(match($o['appointment_status']){'requested'=>'Žádost','confirmed'=>'Potvrzený termín','cancelled'=>'Zrušeno','completed'=>'Dokončeno',default=>'Žádost'})?></span>
 <?php if($o['confirmed_date']!==''):?><p><?=h($o['confirmed_date'])?> <?=h($o['confirmed_time'])?></p><?php endif;?>
 <form method="post" class="inline"><input type="hidden" name="csrf" value="<?=h(mm_csrf())?>"><input type="hidden" name="order_id" value="<?=h($o['id'])?>">
-<label>Datum<input type="date" name="confirmed_date" value="<?=h($o['confirmed_date'])?>" required></label><label>Čas<input type="time" name="confirmed_time" step="900" value="<?=h($o['confirmed_time']?:'10:00')?>" required></label><button name="action" value="confirm">Potvrdit</button></form>
+<label>Datum<input type="date" name="confirmed_date" value="<?=h($o['confirmed_date']?:$o['preferred_date'])?>" required></label><label>Čas<input type="time" name="confirmed_time" step="900" value="<?=h($o['confirmed_time']?:($o['preferred_time']?:'10:00'))?>" required></label><button name="action" value="confirm">Potvrdit</button></form>
 <form method="post" class="inline"><input type="hidden" name="csrf" value="<?=h(mm_csrf())?>"><input type="hidden" name="order_id" value="<?=h($o['id'])?>"><button name="action" value="complete">Dokončit</button><button name="action" value="cancel" onclick="return confirm('Opravdu zrušit termín?')">Zrušit</button></form>
 <?php else:?>
 <p>Vyčerpáno: <?=h($o['redeemed_count'])?> / <?=h($o['quantity'])?></p>
 <?php if($o['status']==='paid'&&$o['redeemed_count']<$o['quantity']):?>
 <form method="post" class="inline"><input type="hidden" name="csrf" value="<?=h(mm_csrf())?>"><input type="hidden" name="order_id" value="<?=h($o['id'])?>"><button name="action" value="redeem" onclick="return confirm('Potvrdit využití jedné masáže z poukazu?')">Uplatnit 1 masáž</button></form>
 <?php endif;?>
-<?php if($o['status']==='paid'):?><a href="voucher.php?token=<?=h(rawurlencode($o['token']))?>" target="_blank" rel="noopener noreferrer">Zobrazit poukaz ↗</a><?php endif;?>
+<?php if($o['status']==='paid'):?>
+<form method="post" class="inline"><input type="hidden" name="csrf" value="<?=h(mm_csrf())?>"><input type="hidden" name="order_id" value="<?=h($o['id'])?>">
+<label>Potvrzený datum<input type="date" name="confirmed_date" required value="<?=h($o['confirmed_date']?:$o['preferred_date'])?>"></label>
+<label>Hodina<input type="time" name="confirmed_time" step="900" required value="<?=h($o['confirmed_time']?:($o['preferred_time']?:'10:00'))?>"></label>
+<button name="action" value="schedule_gift">📅 Potvrdit termín + aktualizovat poukaz</button></form>
+<a href="voucher.php?token=<?=h(rawurlencode($o['token']))?>" target="_blank" rel="noopener noreferrer">🎁 Zobrazit / vytisknout poukaz s QR ↗</a>
+<?php endif;?>
 <?php endif;?>
 </td></tr>
 <?php endforeach;?>
