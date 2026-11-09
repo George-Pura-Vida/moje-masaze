@@ -136,7 +136,9 @@ form.addEventListener('submit',async e=>{
  submit.disabled=true;notice(t('working'));
  try{
   const response=await fetch('order.php',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(data)});
-  const result=await response.json();if(!response.ok)throw Error(result.error||t('failed'));
+  const raw=await response.text();let result;
+  try{result=JSON.parse(raw);}catch{throw Error('Objednávkový server nevrátil platnou odpověď. Zkontrolujte system-status.php na webu.');}
+  if(!response.ok)throw Error((result.error||t('failed'))+(response.status>=500?' (server '+response.status+')':''));
   if(!['CZK','EUR'].includes(result.currency)||!(result.amount>0)||!/^[0-9]{10}$/.test(result.vs))throw Error('Neplatná odpověď serveru.');
   latestOrder=result;renderQr(result);
   $('#payAmountValue').textContent=format(Math.round(result.amount*100),result.currency);
@@ -171,8 +173,9 @@ if(messageForm&&messageStatus&&messageButton){
   messageButton.disabled=true;messageStatus.textContent=msg.sending;messageStatus.classList.remove('error');
   try{
    const result=await fetch('contact-message.php',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(data)});
-   const body=await result.json();
-   if(!result.ok)throw Error(body.error||msg.error);
+   const raw=await result.text();let body;
+   try{body=JSON.parse(raw);}catch{throw Error('Webový server nevrátil platnou odpověď. Zkontrolujte system-status.php.');}
+   if(!result.ok)throw Error((body.error||msg.error)+(result.status>=500?' (server '+result.status+')':''));
    messageForm.reset();messageStatus.textContent=msg.sent;
   }catch(err){messageStatus.textContent=err.message||msg.error;messageStatus.classList.add('error');}
   finally{messageButton.disabled=false;}
