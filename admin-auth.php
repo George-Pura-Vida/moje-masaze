@@ -77,15 +77,15 @@ function mm_admin_reset_is_valid(mixed $token): bool {
 function mm_admin_request_reset(mixed $email,string $ip): void {
  mm_rate_limit('admin-reset:'.$ip);
  // Generic response for all e-mails; only the verified owner receives the reset link.
- if(!is_string($email)||!hash_equals(MM_ADMIN_LOGIN,strtolower(trim($email)))||mm_admin_hash()==='')return;
+ if(!is_string($email)||!hash_equals(MM_ADMIN_LOGIN,strtolower(trim($email))))return;
  $db=mm_db();mm_admin_reset_init($db);
  $q=$db->prepare('SELECT COUNT(*) FROM admin_password_resets WHERE issued_at>?');
  $q->execute([time()-3600]);
  if((int)$q->fetchColumn()>=3)return;
  $token=mm_admin_generate_reset();
  $url='https://moje-masaze.jirijanousek.cz/admin.php?reset='.rawurlencode($token);
- $subject='🔐 Obnovení hesla administrace Moje masáže';
- $html='<!doctype html><html lang="cs"><head><meta charset="UTF-8"></head><body style="font-family:Arial,sans-serif;background:#f5efe5;padding:25px;color:#283e31"><table style="max-width:580px;margin:auto;width:100%;background:white;border-collapse:collapse"><tr><td style="background:#20392b;color:#edd1a4;padding:25px;font:27px Georgia,serif">❁ DOTYK &amp; KLID</td></tr><tr><td style="padding:28px"><h1 style="font:28px Georgia,serif">Obnovení administrátorského hesla</h1><p>Pro účet <b>jgjanousek@gmail.com</b> byl vyžádán odkaz na obnovu hesla. Odkaz lze použít pouze jednou a platí 30 minut.</p><p style="margin:27px 0"><a href="'.mm_escape($url).'" style="background:#294732;color:white;text-decoration:none;padding:14px 25px;border-radius:9px">Nastavit nové heslo</a></p><p style="font-size:13px;color:#6e756d">Pokud jste o obnovu nežádal, zprávu ignorujte. Vaše dosavadní heslo zůstává nezměněné.</p></td></tr></table></body></html>';
+ $subject='🔐 Aktivace nebo obnova hesla · Moje masáže';
+ $html='<!doctype html><html lang="cs"><head><meta charset="UTF-8"></head><body style="font-family:Arial,sans-serif;background:#f5efe5;padding:25px;color:#283e31"><table style="max-width:580px;margin:auto;width:100%;background:white;border-collapse:collapse"><tr><td style="background:#20392b;color:#edd1a4;padding:25px;font:27px Georgia,serif">❁ DOTYK &amp; KLID</td></tr><tr><td style="padding:28px"><h1 style="font:28px Georgia,serif">Aktivace nebo obnovení hesla</h1><p>Pro účet <b>jgjanousek@gmail.com</b> byl vyžádán jednorázový odkaz pro nastavení hesla. Odkaz lze použít pouze jednou a platí 30 minut.</p><p style="margin:27px 0"><a href="'.mm_escape($url).'" style="background:#294732;color:white;text-decoration:none;padding:14px 25px;border-radius:9px">Nastavit nové heslo</a></p><p style="font-size:13px;color:#6e756d">Pokud jste o obnovu nežádal, zprávu ignorujte. Vaše dosavadní heslo zůstává nezměněné.</p></td></tr></table></body></html>';
  $text="Obnovení hesla administrace Moje masáže.\n\nOdkaz pro jednorázové nastavení nového hesla (platí 30 minut):\n".$url."\n\nPokud jste o změnu nežádal, tento e-mail ignorujte.";
  if(!mm_send(MM_ADMIN_LOGIN,['subject'=>$subject,'html'=>$html,'text'=>$text]))error_log('MM admin reset email was not accepted by mail transport.');
 }
