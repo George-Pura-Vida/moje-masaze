@@ -4,6 +4,7 @@ const $=s=>document.querySelector(s),form=$('#bookingForm'),duration=$('#duratio
 const priceLabel=$('#total'),discountLabel=$('#discountInfo'),currencyHelp=$('#currencyHelp'),submit=$('#sendOrder');
 const pay=$('#paymentResult'),formStatus=$('#formStatus'),paymentFeedback=$('#payFeedback');
 const original=new Map();document.querySelectorAll('[data-t]').forEach(el=>original.set(el,el.textContent));
+const originalHeading=new Map();for(const key of ['heroTitle','aboutTitle']){const el=document.querySelector('[data-t="'+key+'"]');if(el)originalHeading.set(el,el.innerHTML);}
 const ui={
  cs:{discount:'Úspora {sum} (sleva {percent} %)',notePlaceholder:'Co by vám pomohlo cítit se při masáži dobře?',paid:'Platba potvrzena',created:'Objednávka vytvořena. Termín potvrdíme individuálně.',giftCreated:'Objednávka poukazu vytvořena. Po potvrzené platbě obdržíte poukaz e-mailem.',working:'Vytvářím objednávku…',invalid:'Zkontrolujte povinné údaje.',failed:'Objednávku se nepodařilo vytvořit.',copyOk:'Údaje byly zkopírovány.',copyFail:'Kopírování se nezdařilo.',stillPending:'Banka zatím úhradu nepotvrdila.',paymentConfirmed:'Úhrada byla ověřena bankou.',checkFail:'Stav nyní nelze ověřit.',voucherOpen:'Otevřít a vytisknout poukaz ↗',currencyLabel:'Měna platby',rateText:'Přepočet kurzem ČNB: 1 EUR = {rate} CZK. Přesná částka se potvrdí při objednávce.',eurOff:'EUR platby zatím nejsou aktivní. Je potřeba ověřený účet a Fio API. Zvolte CZK.',rateMissing:'Kurz EUR nyní není dostupný. Zvolte CZK.',czkHint:'Platba v korunách na účet Fio.'},
  sk:{currencyLabel:'Mena platby',rateText:'Prepočet kurzom ČNB: 1 EUR = {rate} CZK. Presnú sumu potvrdí objednávka.',eurOff:'Platby v EUR zatiaľ nie sú aktívne. Zvoľte CZK.',rateMissing:'Kurz EUR nie je dostupný. Zvoľte CZK.',czkHint:'Platba v CZK na účet Fio.'},
@@ -23,7 +24,8 @@ function renderLang(){
   const k=el.dataset.t,val=translations[lang]?.[k]||original.get(el);
   if((k==='heroTitle'||k==='aboutTitle')&&val.includes('^')){
    const parts=val.split('^');el.replaceChildren(document.createTextNode(parts[0]),document.createElement('br'),document.createTextNode(parts.slice(1).join('^')));
-  }else if(lang!=='cs'||!['heroTitle','aboutTitle'].includes(k)){el.textContent=val;}
+  }else if(lang==='cs'&&originalHeading.has(el)){el.innerHTML=originalHeading.get(el);}
+  else{el.textContent=val;}
  });
  form.querySelectorAll('[data-ph]').forEach(el=>el.placeholder=t(el.dataset.ph));
  form.querySelector('.currency-choice label>span').textContent=t('currencyLabel');
