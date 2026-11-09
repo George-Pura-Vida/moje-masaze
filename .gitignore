@@ -1,0 +1,12 @@
+# Never commit credentials, customer or banking records
+.env
+.env.*
+*.sqlite
+*.sqlite-*
+*.log
+var/
+private/
+*.token
+fio-token.txt
+config.local.php
+.DS_Store
