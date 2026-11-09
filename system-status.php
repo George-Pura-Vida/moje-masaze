@@ -10,7 +10,7 @@ header('Cache-Control: private, no-store');
 header('X-Robots-Tag: noindex,nofollow,noarchive');
 header('X-Content-Type-Options: nosniff');
 if(($_SERVER['REQUEST_METHOD']??'GET')!=='GET'){http_response_code(405);exit('{"ok":false}');}
-$checks=['php'=>true,'sqlite'=>extension_loaded('pdo_sqlite'),'storage'=>false,'database'=>false,'contact'=>false];
+$checks=['php'=>true,'sqlite'=>extension_loaded('pdo_sqlite'),'storage'=>false,'database'=>false,'database_write'=>false,'contact'=>false];
 try{
  require_once __DIR__.'/lib.php';
  $dir=mm_private_dir();
@@ -19,6 +19,17 @@ try{
   $db=mm_db();
   $checks['database']=(bool)$db->query('SELECT 1')->fetchColumn();
   $checks['contact']=(bool)$db->query("SELECT name FROM sqlite_master WHERE type='table' AND name='inquiries'")->fetchColumn();
+  // Test the exact SQLite WRITE permission needed by booking and contact forms.
+  try {
+   $db->exec('BEGIN IMMEDIATE');
+   $q=$db->prepare("INSERT INTO meta(key,value) VALUES('healthcheck_write',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value");
+   $q->execute([bin2hex(random_bytes(6))]);
+   $db->rollBack();
+   $checks['database_write']=true;
+  } catch(Throwable $writeError) {
+   if($db->inTransaction())$db->rollBack();
+   error_log('MM readiness: SQLite write check failed: '.get_class($writeError).' '.substr($writeError->getMessage(),0,180));
+  }
  }
 }catch(Throwable $e){error_log('MM readiness: '.get_class($e).' '.$e->getMessage());}
 $ok=!in_array(false,$checks,true);
