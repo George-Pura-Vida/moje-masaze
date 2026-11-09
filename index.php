@@ -30,8 +30,8 @@ header('X-Frame-Options: SAMEORIGIN');
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261109-booking-v2">
-<script type="module" src="app.js?v=20261109-booking-v2"></script>
+<link rel="stylesheet" href="style.css?v=20261109-crm-v3">
+<script type="module" src="app.js?v=20261109-crm-v3"></script>
 </head>
 <body>
 <a class="skip" href="#main">Přejít na obsah</a>
@@ -80,5 +80,35 @@ header('X-Frame-Options: SAMEORIGIN');
 </div><section id="paymentResult" class="payment-result" hidden><div class="payment-info"><span class="eyebrow" data-t="paymentEyebrow">OBJEDNÁVKA VYTVOŘENA</span><h3 data-t="paymentHeading">Vaše platební údaje</h3><p data-t="paymentLead">QR kód načtěte ve své bankovní aplikaci. Platba je dokončena až po připsání na účet a ověření v bance.</p><dl><dt data-t="payAmount">Částka</dt><dd id="payAmountValue"></dd><dt data-t="payAccount">Účet</dt><dd id="payAccountValue">223366333/2010</dd><dt>IBAN</dt><dd id="payIbanValue">CZ82 2010 0000 0002 2336 6333</dd><dt data-t="payVs">Variabilní symbol</dt><dd id="payVsValue"></dd><dt data-t="payStatus">Stav platby</dt><dd id="payState" data-t="pending">Čeká na platbu</dd></dl><button type="button" id="copyPay" class="btn btn-dark" data-t="copy">Kopírovat platební údaje</button><button type="button" id="checkPay" class="btn btn-quiet" data-t="check">Ověřit stav platby</button><p id="payFeedback" aria-live="polite"></p></div><div class="qr-box"><div id="qrCode"></div><p data-t="qrNote">Naskenujte v mobilním bankovnictví.</p></div></section>
 </div></section>
 <section id="kontakt" class="contact-section"><div class="container contact-grid"><div><span class="eyebrow light" data-t="contactEyebrow">KONTAKT</span><h2 data-t="contactTitle">Rád vám odpovím na otázky.</h2><p data-t="contactDesc">Masáže a konzultace po předchozí domluvě. Místo setkání sdělím při potvrzení termínu.</p></div><div class="contact-links"><a href="mailto:info@jirijanousek.cz">✉ info@jirijanousek.cz</a><a href="tel:+420777796148">☎ +420 777 796 148</a><a href="https://jirijanousek.cz" target="_blank" rel="noopener">↗ jirijanousek.cz</a></div></div></section>
-</main><footer class="footer"><div class="container footer-inner"><div><strong>❁ DOTYK & KLID</strong><p>Jiří Janoušek · IČO 13798804 · Ke Kotlářce 1146/12, 150 00 Praha 5 – Košíře</p></div><div><a href="privacy.php" data-t="footerPrivacy">Ochrana údajů a podmínky</a><a href="#top" data-t="footerTop">Nahoru ↑</a><span>© <?=date('Y')?> Jiří Janoušek</span></div></div></footer>
+<section class="section contact-form-section" id="kontaktni-formular">
+ <div class="container contact-form-layout">
+  <div class="contact-form-intro">
+   <span class="eyebrow" data-contact="eyebrow">OSOBNÍ KONTAKT</span>
+   <h2 data-contact="title">Napište mi. Rád odpovím.</h2>
+   <p data-contact="description">Máte otázku k masážím, volným termínům nebo dárkovým poukazům? Nechte mi zprávu. Odpověď dostanete osobně.</p>
+   <div class="contact-quick"><a href="tel:+420777796148">☎ +420 777 796 148</a><a href="mailto:info@jirijanousek.cz">✉ info@jirijanousek.cz</a></div>
+  </div>
+  <form id="messageForm" class="contact-form-card" novalidate>
+   <div class="fields two">
+    <label><span data-contact="name">Jméno a příjmení *</span><input name="name" autocomplete="name" maxlength="120" required></label>
+    <label><span data-contact="email">E-mail *</span><input name="email" type="email" maxlength="254" autocomplete="email" required></label>
+   </div>
+   <div class="fields two">
+    <label><span data-contact="phone">Telefon (nepovinný)</span><input name="phone" type="tel" maxlength="25" autocomplete="tel"></label>
+    <label><span data-contact="subject">Předmět zprávy *</span><select name="subject" required>
+     <option value="Dotaz k masáži" data-contact="subjectMassage">Dotaz k masáži</option>
+     <option value="Termíny a rezervace" data-contact="subjectBooking">Termíny a rezervace</option>
+     <option value="Dárkové poukazy" data-contact="subjectGift">Dárkové poukazy</option>
+     <option value="Jiný dotaz" data-contact="subjectOther">Jiný dotaz</option>
+    </select></label>
+   </div>
+   <label><span data-contact="message">Vaše zpráva *</span><textarea name="message" rows="5" maxlength="2500" minlength="10" required placeholder="Napište, s čím vám mohu pomoci…"></textarea></label>
+   <div class="honeypot" aria-hidden="true"><label>Web <input name="website" tabindex="-1" autocomplete="off"></label></div>
+   <label class="check"><input name="terms" type="checkbox" required><span data-contact="consent">Souhlasím se zpracováním údajů pouze pro vyřízení dotazu a odpověď. <a href="privacy.php">Ochrana osobních údajů</a>.</span></label>
+   <button id="sendMessage" class="btn btn-dark" type="submit" data-contact="send">Odeslat zprávu ↗</button>
+   <p id="messageStatus" role="status" aria-live="polite"></p>
+  </form>
+ </div>
+</section>
+</main><footer class="footer"><div class="container footer-inner"><div><strong>❁ DOTYK & KLID</strong><p>Jiří Janoušek · IČO 13798804 · Ke Kotlářce 1146/12, 150 00 Praha 5 – Košíře</p></div><div><a href="privacy.php" data-t="footerPrivacy">Ochrana údajů a podmínky</a><a class="footer-admin" href="admin.php" rel="nofollow"><span aria-hidden="true">⚙</span> <span data-contact="adminLink">Administrace</span></a><a href="#top" data-t="footerTop">Nahoru ↑</a><span>© <?=date('Y')?> Jiří Janoušek</span></div></div></footer>
 </body></html>
