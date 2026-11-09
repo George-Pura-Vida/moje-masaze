@@ -244,11 +244,14 @@ function mm_slot_list(string $date,int $duration): array {
  if(!$day||$day->format('Y-m-d')!==$date||$day<new DateTimeImmutable('today',$zone)||$day>new DateTimeImmutable('+365 days',$zone))throw new InvalidArgumentException('Vyberte datum během příštích 12 měsíců.');
  if(!in_array($duration,[60,180],true))throw new InvalidArgumentException('Neplatná délka masáže.');
  $out=[];$now=new DateTimeImmutable('now',$zone);
+ require_once __DIR__.'/google-calendar-lib.php';
+ // Fail closed: if Google is linked but unavailable, never falsely advertise a free slot.
+ $externalBusy=mm_google_connected()?mm_google_busy($date):[];
  foreach(range(9,19) as $hour){
   $time=sprintf('%02d:00',$hour);
   [$begin,$end]=[null,null];
   try{[$begin,$end]=mm_slot_interval($date,$time,$duration);}catch(InvalidArgumentException $e){continue;}
-  $out[]=['time'=>$time,'available'=>($begin>$now->getTimestamp()+3600)&&mm_slot_is_free($date,$time,$duration)];
+  $out[]=['time'=>$time,'available'=>($begin>$now->getTimestamp()+3600)&&mm_slot_is_free($date,$time,$duration)&&!mm_google_overlaps($externalBusy,$begin,$end)];
  }
  return $out;
 }
@@ -335,7 +338,11 @@ function mm_create_order(array $in,string $ip): array {
   if($prefTime!==''&&$prefDate==='')throw new InvalidArgumentException('Pro hodinu zvolte také datum.');
   $lang=$in['lang']??'cs';if(!in_array($lang,['cs','sk','en','es','zh'],true))$lang='cs';
   $db=mm_db();$id=bin2hex(random_bytes(12));$token=bin2hex(random_bytes(24));
-  if($prefDate!==''&&$prefTime!==''){if(!mm_slot_is_free($prefDate,$prefTime,$duration))throw new InvalidArgumentException('Vybraný čas již není volný. Zvolte prosím jiný.');}
+  if($prefDate!==''&&$prefTime!==''){
+    if(!mm_slot_is_free($prefDate,$prefTime,$duration))throw new InvalidArgumentException('Vybraný čas již není volný. Zvolte prosím jiný.');
+    require_once __DIR__.'/google-calendar-lib.php';
+    if(!mm_google_slot_free($prefDate,$prefTime,$duration))throw new InvalidArgumentException('Vybraný čas je obsazený ve vašem Google Kalendáři.');
+  }
   $db->exec('BEGIN IMMEDIATE');
   try {
   $clientId=mm_crm_upsert_client($db,$name,$email,$phone,time());
@@ -531,7 +538,14 @@ function mm_admin_update(string $id,string $action,array $data): array {
  $q=$db->prepare('SELECT * FROM orders WHERE id=?');$q->execute([$id]);$o=$q->fetch();
  if(!$o)throw new InvalidArgumentException('Objednávka nenalezena.');
  $transaction=in_array($action,['confirm','schedule_gift'],true);
- if($transaction)$db->exec('BEGIN IMMEDIATE');
+ if($transaction){
+  $newDate=(string)($data['confirmed_date']??'');$newTime=(string)($data['confirmed_time']??'');
+  if($newDate!==''&&$newTime!==''&&($newDate!==$o['confirmed_date']||$newTime!==$o['confirmed_time'])){
+    require_once __DIR__.'/google-calendar-lib.php';
+    if(!mm_google_slot_free($newDate,$newTime,(int)$o['duration']))throw new InvalidArgumentException('Termín je obsazený v Google Kalendáři.');
+  }
+  $db->exec('BEGIN IMMEDIATE');
+ }
  try {
  if($action==='redeem'){
   if($o['kind']!=='gift'||$o['status']!=='paid')throw new InvalidArgumentException('Poukaz musí být uhrazený.');
