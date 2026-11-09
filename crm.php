@@ -116,8 +116,8 @@ function mm_crm_add_inquiry(array $in,string $ip): string {
   $q->execute([$id,$cid,$name,$email,$phone,$subject,$msg,'new',time(),time()]);
   $q=$db->prepare('INSERT INTO inquiry_email_queue(inquiry_id,recipient_kind,created_at) VALUES(?,?,?)');
   foreach(['admin','client'] as $role)$q->execute([$id,$role,time()]);
-  $db->commit();
- }catch(Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
+  $db->exec('COMMIT');
+ }catch(Throwable $e){$db->exec('ROLLBACK');throw $e;}
  return $id;
 }
 function mm_crm_inquiry_template(array $r,bool $admin): array {
@@ -131,9 +131,14 @@ function mm_crm_inquiry_template(array $r,bool $admin): array {
  return ['subject'=>$admin?'📨 Nový dotaz · Moje masáže':'🌿 Zprávu jsme přijali · Moje masáže','text'=>$text,'html'=>$html];
 }
 function mm_crm_dispatch_inquiries(int $max=15): array {
- $db=mm_db();
- $q=$db->query("SELECT q.id AS qid,q.recipient_kind,i.* FROM inquiry_email_queue q JOIN inquiries i ON i.id=q.inquiry_id WHERE q.status IN ('pending','failed') ORDER BY q.id LIMIT ".max(1,min(50,$max)));
  $results=['sent'=>0,'failed'=>0];
+ $queueLock=mm_mail_queue_lock('inquiry-mail');
+ if($queueLock===null)return $results;
+ try{
+ $db=mm_db();
+ $db->exec("UPDATE inquiry_email_queue SET status='failed' WHERE status='sending'");
+ $q=$db->query("SELECT q.id AS qid,q.recipient_kind,i.* FROM inquiry_email_queue q JOIN inquiries i ON i.id=q.inquiry_id
+   WHERE q.status IN ('pending','failed') ORDER BY q.status='failed',q.id LIMIT ".max(1,min(50,$max)));
  foreach($q->fetchAll() as $i){
   $lock=$db->prepare("UPDATE inquiry_email_queue SET status='sending' WHERE id=? AND status IN ('pending','failed')");
   $lock->execute([$i['qid']]);if($lock->rowCount()!==1)continue;
@@ -144,6 +149,7 @@ function mm_crm_dispatch_inquiries(int $max=15): array {
   $results[$ok?'sent':'failed']++;
  }
  return $results;
+ }finally{fclose($queueLock);}
 }
 function mm_crm_inquiry_status(string $id,string $status): void {
  if(!preg_match('/\A[a-f0-9]{24}\z/D',$id)||!in_array($status,['new','read','resolved'],true))throw new InvalidArgumentException('Neplatný požadavek.');

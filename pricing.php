@@ -11,7 +11,7 @@ try{
  $data=['czk_cents'=>$czk['amount_cents'],'eur_enabled'=>mm_eur_enabled(),'eur_cents'=>null,'rate'=>null,'source'=>'Česká národní banka'];
  if(mm_eur_enabled()){
    try{$eur=mm_quote($duration,$qty,'EUR');$data['eur_cents']=$eur['amount_cents'];$data['rate']=$eur['fx_rate'];}
-   catch(RuntimeException $e){$data['eur_enabled']=false;}
+   catch(RuntimeException $e){error_log('MM pricing: CNB rate unavailable.');}
  }
  mm_json(200,$data);
 }catch(InvalidArgumentException $e){mm_json(422,['error'=>$e->getMessage()]);}

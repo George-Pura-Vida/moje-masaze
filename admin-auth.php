@@ -99,6 +99,6 @@ function mm_admin_complete_reset(string $token,string $newPassword,string $repea
   if($q->rowCount()!==1)throw new InvalidArgumentException('Odkaz už byl použit nebo vypršel.');
   mm_admin_save_password($newPassword);
   $db->exec('UPDATE admin_password_resets SET used_at='.time().' WHERE used_at IS NULL');
-  $db->commit();
- }catch(Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
+  $db->exec('COMMIT');
+ }catch(Throwable $e){$db->exec('ROLLBACK');throw $e;}
 }
