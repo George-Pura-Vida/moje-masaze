@@ -26,6 +26,28 @@ function mm_private_dir(): string {
   if(!is_writable($dir))throw new RuntimeException('Private directory not writable.');
   return $dir;
 }
+function mm_config(string $key,string $default=''): string {
+  $env=getenv($key);
+  if(is_string($env)&&$env!=='')return $env;
+  static $settings=null;
+  if($settings===null){
+    $settings=[];
+    $file=mm_private_dir().'/settings.json';
+    if(is_file($file)&&!is_link($file)&&is_readable($file)){
+      $mode=@fileperms($file);
+      if($mode!==false&&($mode&0077)===0){
+        $raw=@file_get_contents($file,false,null,0,4097);
+        if(is_string($raw)&&strlen($raw)<=4096){
+          $decoded=json_decode($raw,true);
+          if(is_array($decoded))$settings=$decoded;
+        }
+      }
+    }
+  }
+  $v=$settings[$key]??null;
+  return is_string($v)?$v:$default;
+}
+
 function mm_db(): PDO {
   static $db;
   if($db instanceof PDO)return $db;
@@ -101,15 +123,15 @@ function mm_price(int $duration,int $quantity): int {
   return intdiv($unit*$quantity*$percent,100);
 }
 function mm_eur_iban(): string {
- $iban=strtoupper(preg_replace('/\s+/','',(string)(getenv('MASSAGE_EUR_IBAN')?:'')));
+ $iban=strtoupper(preg_replace('/\s+/','',mm_config('MASSAGE_EUR_IBAN')));
  if(!preg_match('/\A[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}\z/D',$iban) || $iban===MM_IBAN)return '';
  return $iban;
 }
 function mm_eur_enabled(): bool {
- return getenv('MASSAGE_EUR_ENABLED')==='1' && mm_eur_iban()!=='' && getenv('MASSAGE_EUR_FIO_CONFIGURED')==='1';
+ return mm_config('MASSAGE_EUR_ENABLED')==='1' && mm_eur_iban()!=='' && mm_config('MASSAGE_EUR_FIO_CONFIGURED')==='1';
 }
 function mm_eur_bic(): string {
- $bic=strtoupper(trim((string)(getenv('MASSAGE_EUR_BIC')?:'FIOBCZPPXXX')));
+ $bic=strtoupper(trim(mm_config('MASSAGE_EUR_BIC','FIOBCZPPXXX')));
  return preg_match('/\A[A-Z0-9]{8}(?:[A-Z0-9]{3})?\z/D',$bic)?$bic:'FIOBCZPPXXX';
 }
 function mm_eur_rate(): float {
@@ -229,7 +251,7 @@ function mm_queue(string $id,string $kind): void {
 }
 function mm_money(int $cents,string $currency='CZK'): string {return number_format($cents/100,$currency==='EUR'?2:($cents%100?2:0),',',' ').($currency==='EUR'?' €':' Kč');}
 function mm_escape(mixed $value): string{return htmlspecialchars((string)$value,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');}
-function mm_admin(): string {$raw=getenv('MASSAGE_ADMIN_EMAIL');return is_string($raw)&&filter_var($raw,FILTER_VALIDATE_EMAIL)?$raw:MM_ADMIN_DEFAULT;}
+function mm_admin(): string {$raw=mm_config('MASSAGE_ADMIN_EMAIL');return filter_var($raw,FILTER_VALIDATE_EMAIL)?$raw:MM_ADMIN_DEFAULT;}
 function mm_header_encoded(string $s): string {return '=?UTF-8?B?'.base64_encode($s).'?=';}
 function mm_salutation(string $name): string {
   // Unknown surnames are not automatically declined: neutral address is safer.
