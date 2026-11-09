@@ -40,6 +40,14 @@ check((int)mm_db()->query('SELECT COUNT(*) FROM email_queue')->fetchColumn()===2
 $withoutHoneypot=$input;unset($withoutHoneypot['website']);
 $cleanOrder=mm_create_order($withoutHoneypot,'192.0.2.18');
 check($cleanOrder['id']!==''&&$cleanOrder['currency']==='CZK','real CZK order without auto-filled anti-spam field is accepted');
+
+$dayForTest=(new DateTimeImmutable('+15 days',new DateTimeZone('Europe/Prague')))->format('Y-m-d');
+$realistic=[...$input,'name'=>'Test Client CZ','email'=>'booking.test@example.org','phone'=>'+420700123456','count'=>'1','date'=>$dayForTest,'time'=>'13:00','note'=>'Thank you'];
+$realOrder=mm_create_order($realistic,'192.0.2.121');
+check($realOrder['currency']==='CZK' && (float)$realOrder['amount']===2000.0,'fully populated booking form saves valid date, time and phone');
+$legacyAuto=mm_create_order([...$input,'website'=>'autofilled.example'],'192.0.2.122');
+check(strlen($legacyAuto['token'])===48,'browser autofill of legacy anti-spam field does not block orders');
+
 check(str_contains(mm_mail_template($row,'new_client')['html'],'DOTYK'),'branded HTML email');
 try{mm_create_order([...$input,'csrf'=>'invalid'],'192.0.2.2');throw new RuntimeException('FAIL: invalid CSRF accepted');}catch(InvalidArgumentException $e){check(true,'invalid CSRF rejected');}
 try{mm_create_order([...$input,'currency'=>'EUR'],'192.0.2.3');throw new RuntimeException('FAIL: unconfigured EUR order accepted');}catch(InvalidArgumentException $e){check(true,'unconfigured EUR order rejected');}
@@ -111,6 +119,10 @@ putenv('MASSAGE_EUR_ENABLED=0');
 $inquiry=mm_crm_add_inquiry(['name'=>'Test Contact','email'=>'contact@example.org','phone'=>'+420 777 000 222','subject'=>'Gift voucher','message'=>'Please send me an appointment date for a gift voucher.','website'=>'','terms'=>true,'csrf'=>$csrf],'192.0.2.90');
 $q=mm_db()->prepare('SELECT status FROM inquiries WHERE id=?');$q->execute([$inquiry]);
 check($q->fetchColumn()==='new','contact message safely stored in inbox');
+
+$contactAuto=mm_crm_add_inquiry(['name'=>'Test Client CZ','email'=>'booking.test@example.org','phone'=>'+420700123456','subject'=>'Gift voucher','message'=>'Please arrange a new massage appointment for next week.','website'=>'autofilled.example','terms'=>true,'csrf'=>$csrf],'192.0.2.123');
+check(strlen($contactAuto)===24,'contact form saves with matching customer email and autofilled legacy field');
+
 check((int)mm_db()->query("SELECT COUNT(*) FROM inquiry_email_queue WHERE status='pending'")->fetchColumn()===2,'client and administrator contact confirmation messages queued');
 mm_crm_inquiry_status($inquiry,'resolved');$q->execute([$inquiry]);check($q->fetchColumn()==='resolved','inbox message can be marked resolved');
 require_once dirname(__DIR__).'/admin-auth.php';
