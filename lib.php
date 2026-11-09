@@ -18,13 +18,33 @@ const MM_FOCUS=[
  'touch'=>'Terapeutický dotek'
 ];
 function mm_private_dir(): string {
+  static $ready=null;
+  if(is_string($ready))return $ready;
   $env=getenv('MASSAGE_PRIVATE_DIR');
-  $dir=is_string($env)&&$env!==''?$env:dirname(__DIR__).'/moje-masaze-private';
-  if(!str_starts_with($dir,'/'))throw new RuntimeException('Private path must be absolute.');
-  if(!is_dir($dir)&&!@mkdir($dir,0700,true)&&!is_dir($dir))throw new RuntimeException('Private directory cannot be created.');
-  @chmod($dir,0700);
-  if(!is_writable($dir))throw new RuntimeException('Private directory not writable.');
-  return $dir;
+  $explicit=is_string($env)&&$env!=='';
+  $primary=$explicit?$env:dirname(__DIR__).'/moje-masaze-private';
+  if(!str_starts_with($primary,'/'))throw new RuntimeException('MASSAGE_PRIVATE_DIR must be an absolute path.');
+  // Never silently switch away from existing client records if their original directory is unwritable.
+  $candidates=[$primary];
+  if(!$explicit&&!file_exists($primary)){
+    $home=getenv('HOME');
+    if(is_string($home)&&$home!==''&&str_starts_with($home,'/'))
+      $candidates[]=rtrim($home,'/').'/moje-masaze-private';
+  }
+  foreach(array_unique($candidates) as $dir){
+    if(is_link($dir)||(!is_dir($dir)&&!@mkdir($dir,0700,true)&&!is_dir($dir)))continue;
+    $resolved=realpath($dir);$public=realpath(__DIR__);
+    if($resolved===false||$public===false||$resolved===$public||str_starts_with($resolved,$public.'/'))continue;
+    @chmod($dir,0700);
+    if(!is_writable($dir))continue;
+    // PHP-FPM may report a writable directory but still reject actual file creation.
+    $probe=$dir.'/.probe-'.bin2hex(random_bytes(5));
+    if(@file_put_contents($probe,'ok',LOCK_EX)===false)continue;
+    @unlink($probe);
+    return $ready=$resolved;
+  }
+  error_log('MM storage: no writable private directory OUTSIDE webroot; set MASSAGE_PRIVATE_DIR in WebKitty.');
+  throw new RuntimeException('Private database directory cannot be created or written. Ask hosting to configure MASSAGE_PRIVATE_DIR outside public webroot.');
 }
 function mm_config(string $key,string $default=''): string {
   $env=getenv($key);
@@ -51,10 +71,20 @@ function mm_config(string $key,string $default=''): string {
 function mm_db(): PDO {
   static $db;
   if($db instanceof PDO)return $db;
+  if(!extension_loaded('pdo_sqlite'))throw new RuntimeException('Missing PHP pdo_sqlite extension. Enable it in WebKitty PHP settings.');
   $file=mm_private_dir().'/orders.sqlite';
   $db=new PDO('sqlite:'.$file,null,null,[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC]);
-  $db->exec("PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;
-CREATE TABLE IF NOT EXISTS orders (
+  $db->exec('PRAGMA busy_timeout=5000');
+  $db->exec('PRAGMA foreign_keys=ON');
+  try{
+    $journal=$db->query('PRAGMA journal_mode=WAL')->fetchColumn();
+    if(!is_string($journal)||strtolower($journal)!=='wal')$db->exec('PRAGMA journal_mode=DELETE');
+  }catch(PDOException $e){
+    // Network/shared hosting may disallow WAL or the necessary -shm shared-memory file.
+    error_log('MM database: WAL unavailable, using DELETE journal mode.');
+    $db->exec('PRAGMA journal_mode=DELETE');
+  }
+  $db->exec("CREATE TABLE IF NOT EXISTS orders (
  id TEXT PRIMARY KEY,
  token TEXT NOT NULL UNIQUE,
  vs TEXT NOT NULL UNIQUE,
