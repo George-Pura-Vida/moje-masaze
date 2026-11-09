@@ -109,6 +109,16 @@ function mm_fio_reconcile(PDO $db,array $data,DateTimeImmutable $start,DateTimeI
  return $matched;
 }
 
+/** Keep a private result for scheduled runs when the hosting test UI is unavailable. */
+function mm_fio_report(string $message): void {
+ try{
+  $dir=mm_private_dir();
+  $temp=$dir.'/.fio-result-'.bin2hex(random_bytes(6));
+  if(@file_put_contents($temp,gmdate('c').' '.$message.PHP_EOL,LOCK_EX)===false)return;
+  if(!@chmod($temp,0600)||!@rename($temp,$dir.'/fio-last-run.log'))@unlink($temp);
+ }catch(Throwable $e){error_log('MM Fio sync: could not write private status.');}
+}
+
 function mm_fio_run(): int {
  try{
   if(!function_exists('curl_init'))throw new RuntimeException('PHP cURL extension missing.');
@@ -134,11 +144,14 @@ function mm_fio_run(): int {
    $data=json_decode($body,true,100,JSON_THROW_ON_ERROR|JSON_BIGINT_AS_STRING);
    if(!is_array($data))throw new RuntimeException('Invalid Fio statement.');
    $matched=mm_fio_reconcile($db,$data,$start,$end);
-   printf("Fio sync complete: CZK=%d EUR=%d\n",$matched['CZK'],$matched['EUR']);
+   $result=sprintf('Fio sync complete: CZK=%d EUR=%d',$matched['CZK'],$matched['EUR']);
+   mm_fio_report($result);
+   echo $result.PHP_EOL;
   }finally{fclose($lock);}
  }catch(Throwable $e){
   $reason=get_class($e)===RuntimeException::class?$e->getMessage():get_class($e);
   error_log('MM Fio sync: '.$reason);
+  mm_fio_report('Fio sync failed: '.$reason);
   fwrite(STDERR,"Fio sync failed: ".$reason."\n");
   return 1;
  }
