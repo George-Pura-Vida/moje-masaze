@@ -256,6 +256,22 @@ function mm_block_create(string $date,string $start,string $end,string $note='')
  $q->execute([$date,$start,$end,mm_text($note,100),time()]);
 }
 
+function mm_calendar_secret(): string {
+ $file=mm_private_dir().'/calendar-key.txt';
+ if(!is_file($file)){
+  $key=bin2hex(random_bytes(32));
+  $tmp=$file.'.'.bin2hex(random_bytes(5)).'.tmp';
+  if(file_put_contents($tmp,$key,LOCK_EX)===false)throw new RuntimeException('Nelze vytvořit kalendářový klíč.');
+  @chmod($tmp,0600);
+  if(!@rename($tmp,$file)){$key=is_file($file)?trim((string)file_get_contents($file)):'';@unlink($tmp);}
+ }
+ $perms=@fileperms($file);
+ if($perms===false||($perms&0077)!==0||is_link($file))throw new RuntimeException('Kalendářový klíč není uložen bezpečně.');
+ $key=trim((string)file_get_contents($file));
+ if(!preg_match('/\A[a-f0-9]{64}\z/D',$key))throw new RuntimeException('Neplatný kalendářový klíč.');
+ return $key;
+}
+
 function mm_csrf(): string {
   if(session_status()!==PHP_SESSION_ACTIVE)session_start();
   if(empty($_SESSION['mm_csrf']))$_SESSION['mm_csrf']=bin2hex(random_bytes(24));
