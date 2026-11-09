@@ -14,3 +14,26 @@
 .booking-availability{font-size:.82rem;line-height:1.6;color:#345c41;background:#ebf4eb;border:1px solid #cee4ce;border-radius:10px;padding:12px 15px;margin:10px 0 20px}
 .booking-availability.warning{background:#fff2e4;color:#865c2e;border-color:#e8caaa}
 .booking-card select#time option:disabled{color:#a6a6a6}
+
+/* CRM + contact page — calm typography and unobtrusive owner-only entry */
+.footer-admin{display:inline-flex;gap:6px;align-items:center;border:1px solid #b79d74;border-radius:8px;padding:7px 12px;color:#dfc79c!important;text-decoration:none!important;font-weight:600;transition:background .2s}
+.footer-admin:hover,.footer-admin:focus-visible{background:#b08c59;color:#fff!important}
+.contact-form-section{background:linear-gradient(135deg,#f5ede0 0%,#e7e6da 100%);padding-block:70px}
+.contact-form-layout{display:grid;grid-template-columns:.9fr 1.1fr;gap:clamp(20px,5vw,85px);align-items:center}
+.contact-form-intro h2{font:clamp(34px,4vw,57px)/1.18 Georgia,serif;color:#294034;margin:18px 0}
+.contact-form-intro p{max-width:460px;line-height:1.8;color:#657064}
+.contact-quick{display:flex;flex-direction:column;gap:15px;margin:30px 0}
+.contact-quick a{color:#385744;font-weight:700;text-decoration:none;overflow-wrap:anywhere}
+.contact-form-card{background:#fffcf7;border:1px solid #d7c9b3;border-radius:18px;box-shadow:0 25px 65px #2337271a;padding:clamp(20px,4vw,38px)}
+.contact-form-card label:not(.check){display:block;margin:0 0 15px;color:#304536;font-weight:600;font-size:.88rem}
+.contact-form-card label span{display:inline-block;margin-bottom:7px}
+.contact-form-card input:not([type=checkbox]),.contact-form-card select,.contact-form-card textarea{width:100%;border:1px solid #d8cfbf;background:#fff;color:#23382b;border-radius:9px;padding:12px;font:inherit;min-height:44px}
+.contact-form-card input:focus,.contact-form-card textarea:focus,.contact-form-card select:focus{outline:2px solid #b99059;outline-offset:2px}
+.contact-form-card .check{display:flex;align-items:flex-start;gap:12px;margin:18px 0;font-size:.85rem;line-height:1.65;color:#535c51}
+.contact-form-card .check input{margin-top:6px;min-width:18px;min-height:18px}
+.contact-form-card .check span{display:inline;margin:0}
+.contact-form-card .check a{color:#7a592d}
+.contact-form-card button{margin-top:8px}
+#messageStatus{font-size:.9rem;line-height:1.6;min-height:1.4em;color:#2b6242}
+#messageStatus.error{color:#9b4538}
+@media(max-width:850px){.contact-form-layout{grid-template-columns:1fr}.contact-form-section{padding-block:40px}.contact-form-intro h2{font-size:35px}}
