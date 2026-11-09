@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 if(PHP_SAPI!=='cli'){http_response_code(404);exit;}
-require_once dirname(__DIR__).'/lib.php';
+require_once __DIR__.'/fio-sync.php';
 ini_set('display_errors','0');
 try{
  $private=mm_private_dir();
@@ -18,10 +18,10 @@ try{
     $mode=is_file($path)?@fileperms($path):false;
     return $mode!==false&&($mode&0077)===0?'configured':'missing';
   })(),
-  'CZK Fio token'=>(function(){
-    $token=getenv('MASSAGE_FIO_TOKEN');if(is_string($token)&&$token!=='')return 'configured in CLI environment';
-    $path=mm_private_dir().'/fio-token.txt';$mode=is_file($path)?@fileperms($path):false;
-    return $mode!==false&&($mode&0077)===0?'private token file present':'missing';
+  'Fio read-only token'=>mm_fio_token()!==''?'configured':'missing or invalid',
+  'Last successful Fio sync (UTC)'=>(function()use($db){
+    $last=(int)$db->query("SELECT value FROM meta WHERE key='last_bank_sync'")->fetchColumn();
+    return $last?gmdate('c',$last):'not recorded';
   })(),
   'EUR bank payments'=>mm_eur_enabled()?'enabled':'inactive',
   'Total orders'=>(int)$db->query('SELECT COUNT(*) FROM orders')->fetchColumn(),

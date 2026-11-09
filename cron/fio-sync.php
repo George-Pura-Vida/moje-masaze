@@ -1,109 +1,148 @@
 <?php
 declare(strict_types=1);
-/* Server-side Fio synchronization. Run from CLI every five minutes.
- * Each currency is matched only against its verified destination account,
- * incoming amount, bank transaction ID and unambiguous payment reference.
- * Never expose access tokens in URLs, errors or a public directory.
- */
+/* Read-only Fio synchronization for the one account used by CZK and EUR. */
 if(PHP_SAPI!=='cli'){http_response_code(404);exit;}
-require_once dirname(__DIR__).'/lib.php';
 ini_set('display_errors','0');
+require_once dirname(__DIR__).'/lib.php';
 
 function mm_fio_value(array $row,int $n): mixed {
  return $row['column'.$n]['value']??$row['column_'.$n]['value']??null;
 }
-function mm_fio_date(mixed $raw): ?string {
- if(is_int($raw)||is_float($raw)||is_string($raw)&&preg_match('/\A[0-9]{10}(?:[0-9]{3})?\z/D',$raw)){
-  $num=(int)$raw;if($num>9999999999)$num=intdiv($num,1000);
+
+function mm_fio_date(mixed $raw): ?DateTimeImmutable {
+ $tz=new DateTimeZone('Europe/Prague');
+ if((is_int($raw)||is_string($raw))&&preg_match('/\A[0-9]{10}(?:[0-9]{3})?\z/D',(string)$raw)){
+  $num=(int)$raw;
+  if(strlen((string)$raw)===13)$num=intdiv($num,1000);
   if($num<946684800||$num>4102444800)return null;
-  return (new DateTimeImmutable('@'.$num))->setTimezone(new DateTimeZone('Europe/Prague'))->format('Y-m-d');
+  return (new DateTimeImmutable('@'.$num))->setTimezone($tz)->setTime(0,0);
  }
- if(is_string($raw)&&preg_match('/\A(\d{4}-\d{2}-\d{2})/D',$raw,$m))return $m[1];
- return null;
+ if(!is_string($raw)||!preg_match('/\A(\d{4}-\d{2}-\d{2})(?:[+-]\d{2}:\d{2})?\z/D',$raw,$match))return null;
+ $date=DateTimeImmutable::createFromFormat('!Y-m-d',$match[1],$tz);
+ return $date&&$date->format('Y-m-d')===$match[1]?$date:null;
 }
+
 function mm_fio_cents(mixed $raw): ?int {
  if(!is_string($raw)&&!is_float($raw)&&!is_int($raw))return null;
- $v=str_replace(',','.',trim((string)$raw));
- if(!preg_match('/\A[0-9]{1,7}(?:\.[0-9]{1,4})?\z/D',$v))return null;
- $val=(float)$v;if(!is_finite($val)||$val<=0)return null;
- return (int)round($val*100);
+ $value=str_replace(',','.',trim((string)$raw));
+ if(!preg_match('/\A([0-9]{1,7})(?:\.([0-9]{1,2})0*)?\z/D',$value,$parts))return null;
+ $cents=(int)$parts[1]*100+(int)str_pad($parts[2]??'',2,'0');
+ return $cents>0?$cents:null;
 }
-function mm_fio_token(string $currency): string {
- $env=getenv($currency==='EUR'?'MASSAGE_EUR_FIO_TOKEN':'MASSAGE_FIO_TOKEN');
- if(is_string($env)&&$env!=='')return $env;
- $path=mm_private_dir().'/'.($currency==='EUR'?'fio-token-eur.txt':'fio-token.txt');
- if(!is_file($path)||is_link($path)||!is_readable($path))return '';
- $perm=@fileperms($path);
- if($perm===false||($perm&0077)!==0)return '';
- return trim((string)file_get_contents($path));
+
+function mm_fio_token(): string {
+ $token=getenv('MASSAGE_FIO_TOKEN');
+ if(!is_string($token)||trim($token)===''){
+  $path=mm_private_dir().'/fio-token.txt';
+  $mode=is_file($path)&&!is_link($path)?@fileperms($path):false;
+  $token=$mode!==false&&($mode&0077)===0?@file_get_contents($path,false,null,0,256):false;
+ }
+ $token=is_string($token)?trim($token):'';
+ return preg_match('/\A[A-Za-z0-9]{30,128}\z/D',$token)?$token:'';
 }
+
 function mm_fio_reference(array $row,string $currency): ?string {
- $vs=trim((string)(mm_fio_value($row,5)??''));
- if(preg_match('/\A57[0-9]{8}\z/D',$vs))return $vs;
- if($currency!=='EUR')return null;
- // Euro SEPA payments may put the variable symbol into the payment reference
- // or recipient's message instead of Fio's variable-symbol field.
- foreach([16,27] as $n){
-  $raw=(string)(mm_fio_value($row,$n)??'');
-  if(preg_match('/(?:^|[^A-Z0-9])MMVS-(57[0-9]{8})(?:$|[^0-9])/i',$raw,$m))return $m[1];
+ $raw=mm_fio_value($row,5);
+ $vs=is_string($raw)||is_int($raw)?trim((string)$raw):'';
+ if($vs!==''&&!preg_match('/\A57[0-9]{8}\z/D',$vs))return null;
+ $references=$vs===''?[]:[$vs];
+ // SEPA remittance information may carry MMVS in place of the bank's VS.
+ foreach([16,27] as $column){
+  $message=mm_fio_value($row,$column);
+  if(!is_string($message))continue;
+  preg_match_all('/(?<![A-Z0-9])MMVS-(57[0-9]{8})(?![A-Z0-9])/i',$message,$matches);
+  $references=array_merge($references,$matches[1]);
  }
- return null;
+ $references=array_unique($references);
+ return count($references)===1&&($currency==='EUR'||$vs!=='')?(string)reset($references):null;
 }
-function mm_sync_account(PDO $db,string $currency,string $iban,string $token): int {
- if(!preg_match('/\A[A-Za-z0-9]{30,128}\z/D',$token))throw new RuntimeException('Read-only Fio token is missing for '.$currency);
- $q=$db->prepare('SELECT value FROM meta WHERE key=?');
- $key='last_bank_sync_'.$currency;$q->execute([$key]);$last=(int)$q->fetchColumn();
- if($last&&time()-$last<60)return 0;
- $now=new DateTimeImmutable('now',new DateTimeZone('Europe/Prague'));
- $start=$now->modify('-14 days')->format('Y-m-d');$end=$now->format('Y-m-d');
- // URL includes bank secret; NEVER log or print it.
- $url='https://fioapi.fio.cz/v1/rest/periods/'.rawurlencode($token).'/'.$start.'/'.$end.'/transactions.json';
- $curl=curl_init($url);
- curl_setopt_array($curl,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>30,CURLOPT_FOLLOWLOCATION=>false,CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2,CURLOPT_HTTPHEADER=>['Accept: application/json']]);
- $body=curl_exec($curl);$http=(int)curl_getinfo($curl,CURLINFO_HTTP_CODE);curl_close($curl);
- if(!is_string($body)||strlen($body)>5000000||$http!==200)throw new RuntimeException('Fio response unavailable for '.$currency.' (HTTP '.$http.')');
- $data=json_decode($body,true,100,JSON_THROW_ON_ERROR);
+
+function mm_fio_reconcile(PDO $db,array $data,DateTimeImmutable $start,DateTimeImmutable $end): array {
  $statement=$data['accountStatement']??null;
- if(!is_array($statement))throw new RuntimeException('Fio statement missing for '.$currency);
- $info=$statement['info']??[];
- $actual=strtoupper(preg_replace('/\s+/','',(string)($info['iban']??'')));
- if($actual!==$iban)throw new RuntimeException('Unexpected Fio IBAN for '.$currency);
- $txs=$statement['transactionList']['transaction']??[];
- if($txs===null)$txs=[];
- if(!is_array($txs))throw new RuntimeException('Invalid Fio transactions for '.$currency);
- $matched=0;
- foreach($txs as $tx){
-  if(!is_array($tx))continue;
-  $id=(string)(mm_fio_value($tx,22)??'');
-  $money=mm_fio_cents(mm_fio_value($tx,1));
-  $txCurrency=strtoupper(trim((string)(mm_fio_value($tx,14)??$info['currency']??'')));
-  $when=mm_fio_date(mm_fio_value($tx,0));
-  $vs=mm_fio_reference($tx,$currency);
-  if(!preg_match('/\A[0-9]{1,20}\z/D',$id)||$money===null||$when===null||$vs===null||$txCurrency!==$currency)continue;
-  $update=$db->prepare("UPDATE orders SET status='paid',paid_at=?,fio_id=?
-    WHERE vs=? AND currency=? AND amount_cents=? AND status='pending'
-    AND date(created_at,'unixepoch','-1 day')<=?
-    AND NOT EXISTS (SELECT 1 FROM orders WHERE fio_id=?)");
-  $update->execute([time(),$id,$vs,$currency,$money,$when,$id]);
-  if($update->rowCount()!==1)continue;
-  $order=$db->prepare('SELECT id FROM orders WHERE fio_id=?');$order->execute([$id]);
-  $orderId=(string)$order->fetchColumn();
-  mm_queue($orderId,'paid_client');mm_queue($orderId,'paid_admin');$matched++;
+ $info=$statement['info']??null;
+ $rawIban=$info['iban']??null;
+ if(!is_string($rawIban)||strtoupper(preg_replace('/\s+/','',$rawIban))!==MM_IBAN){
+  throw new RuntimeException('Fio returned a statement for an unexpected account.');
  }
- $db->prepare('INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value')->execute([$key,(string)time()]);
+ $list=$statement['transactionList']??null;
+ if(!is_array($list)||!array_key_exists('transaction',$list))throw new RuntimeException('Fio transaction list is missing.');
+ $transactions=$list['transaction']??[];
+ if(!is_array($transactions)||!array_is_list($transactions))throw new RuntimeException('Invalid Fio transaction list.');
+
+ $matched=['CZK'=>0,'EUR'=>0];
+ $update=$db->prepare("UPDATE orders SET status='paid',paid_at=?,fio_id=?
+   WHERE vs=? AND currency=? AND amount_cents=? AND status='pending'
+   AND (bank_iban=? OR (bank_iban='' AND currency='CZK'))
+   AND created_at<?
+   AND NOT EXISTS (SELECT 1 FROM orders WHERE fio_id=?)");
+ $order=$db->prepare('SELECT id FROM orders WHERE fio_id=?');
+ $db->exec('BEGIN IMMEDIATE');
+ try{
+  foreach($transactions as $row){
+   if(!is_array($row))continue;
+   $rawId=mm_fio_value($row,22);
+   $id=is_string($rawId)||is_int($rawId)?(string)$rawId:'';
+   $amount=mm_fio_cents(mm_fio_value($row,1));
+   $currency=mm_fio_value($row,14);
+   $date=mm_fio_date(mm_fio_value($row,0));
+   if(!isset($matched[is_string($currency)?$currency:''])||$amount===null||$date===null||$date<$start||$date>$end||
+      !preg_match('/\A[1-9][0-9]{0,19}\z/D',$id))continue;
+   $reference=mm_fio_reference($row,$currency);
+   if($reference===null)continue;
+   $update->execute([time(),$id,$reference,$currency,$amount,MM_IBAN,$date->modify('+1 day')->getTimestamp(),$id]);
+   if($update->rowCount()!==1)continue;
+   $order->execute([$id]);
+   $orderId=$order->fetchColumn();
+   $order->closeCursor();
+   if(!is_string($orderId))throw new RuntimeException('Confirmed order is missing.');
+   mm_queue($orderId,'paid_client');
+   mm_queue($orderId,'paid_admin');
+   $matched[$currency]++;
+  }
+  $db->prepare("INSERT INTO meta(key,value) VALUES('last_bank_sync',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+     ->execute([(string)time()]);
+  $db->exec('COMMIT');
+ }catch(Throwable $e){
+  $db->exec('ROLLBACK');
+  throw $e;
+ }
  return $matched;
 }
 
-if(!function_exists('curl_init')){fwrite(STDERR,"cURL extension missing.\n");exit(1);}
-$lock=fopen(mm_private_dir().'/fio.lock','c');
-if(!$lock||!flock($lock,LOCK_EX|LOCK_NB))exit(0);
-try{
- $db=mm_db();$total=0;
- $total+=mm_sync_account($db,'CZK',MM_IBAN,mm_fio_token('CZK'));
- if(mm_eur_enabled())$total+=mm_sync_account($db,'EUR',mm_eur_iban(),mm_fio_token('EUR'));
- $mail=mm_dispatch_mail(50);
- printf("Massage Fio sync: matched=%d sent=%d failed=%d\n",$total,$mail['sent'],$mail['failed']);
-}catch(Throwable $e){
- error_log('MM Fio sync: '.$e->getMessage());
- fwrite(STDERR,"Bank synchronization failed; inspect server error log.\n");exit(1);
-}finally{flock($lock,LOCK_UN);fclose($lock);}
+function mm_fio_run(): int {
+ try{
+  if(!function_exists('curl_init'))throw new RuntimeException('PHP cURL extension missing.');
+  $lock=fopen(mm_private_dir().'/fio.lock','c');
+  if($lock===false)throw new RuntimeException('Fio sync lock unavailable.');
+  try{
+   if(!flock($lock,LOCK_EX|LOCK_NB)){echo "Fio sync already running.\n";return 0;}
+   $db=mm_db();
+   $last=(int)$db->query("SELECT value FROM meta WHERE key='last_bank_sync'")->fetchColumn();
+   if($last&&time()-$last<60){echo "Fio sync already completed within the last minute.\n";return 0;}
+   $token=mm_fio_token();
+   if($token==='')throw new RuntimeException('Read-only Fio token is missing or invalid.');
+   $end=new DateTimeImmutable('today',new DateTimeZone('Europe/Prague'));
+   $start=$end->modify('-14 days');
+   // The Fio API uses a token in the request URL. Keep it out of output and logs.
+   $url='https://fioapi.fio.cz/v1/rest/periods/'.rawurlencode($token).'/'.$start->format('Y-m-d').'/'.$end->format('Y-m-d').'/transactions.json';
+   $curl=curl_init($url);
+   curl_setopt_array($curl,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>30,CURLOPT_FOLLOWLOCATION=>false,CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2,CURLOPT_HTTPHEADER=>['Accept: application/json']]);
+   $body=curl_exec($curl);
+   $http=(int)curl_getinfo($curl,CURLINFO_HTTP_CODE);
+   curl_close($curl);
+   if(!is_string($body)||strlen($body)>5000000||$http!==200)throw new RuntimeException('Fio statement unavailable (HTTP '.$http.').');
+   $data=json_decode($body,true,100,JSON_THROW_ON_ERROR|JSON_BIGINT_AS_STRING);
+   if(!is_array($data))throw new RuntimeException('Invalid Fio statement.');
+   $matched=mm_fio_reconcile($db,$data,$start,$end);
+   printf("Fio sync complete: CZK=%d EUR=%d\n",$matched['CZK'],$matched['EUR']);
+  }finally{fclose($lock);}
+ }catch(Throwable $e){
+  $reason=get_class($e)===RuntimeException::class?$e->getMessage():get_class($e);
+  error_log('MM Fio sync: '.$reason);
+  fwrite(STDERR,"Fio sync failed: ".$reason."\n");
+  return 1;
+ }
+ return 0;
+}
+
+if(realpath($_SERVER['SCRIPT_FILENAME']??'')===__FILE__)exit(mm_fio_run());

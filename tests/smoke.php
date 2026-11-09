@@ -22,7 +22,7 @@ check(mm_price(180,1)===300000,'180-minute price');
 check(mm_price(180,2)===570000,'two 180-minute sessions discounted by 5%');
 check(mm_price(180,3)===810000,'three 180-minute sessions discounted by 10%');
 try{mm_price(10,1);throw new RuntimeException('FAIL: accepted invalid duration');}catch(InvalidArgumentException $e){check(true,'invalid duration is rejected');}
-try{mm_quote(60,1,'EUR');throw new RuntimeException('FAIL: unconfigured EUR payments accepted');}catch(InvalidArgumentException $e){check(true,'EUR disabled without separate bank config');}
+try{mm_quote(60,1,'EUR');throw new RuntimeException('FAIL: unconfigured EUR payments accepted');}catch(InvalidArgumentException $e){check(true,'EUR can be disabled by configuration');}
 check(mm_quote(60,1,'CZK')['amount_cents']===200000,'CZK quote');
 $csrf=mm_csrf();
 $input=['kind'=>'booking','focus'=>'holistic','duration'=>'60','count'=>'2','name'=>'Test Client','email'=>'demo@example.org','phone'=>'+420 700 111 222','date'=>'','time'=>'','note'=>'','recipient'=>'','website'=>'','lang'=>'en','currency'=>'CZK','terms'=>true,'csrf'=>$csrf];
@@ -155,5 +155,59 @@ $denied=false;
 try{mm_admin_complete_reset($reset,'ThirdSafePassword_2026','ThirdSafePassword_2026');}
 catch(InvalidArgumentException $e){$denied=true;}
 check($denied,'replay of used password reset denied');
+
+require_once dirname(__DIR__).'/cron/fio-sync.php';
+$bankDay=new DateTimeImmutable('today',new DateTimeZone('Europe/Prague'));
+$periodStart=$bankDay->modify('-14 days');
+function bank_row(string $id,mixed $amount,?string $currency,string $day,string $vs='',string $message=''): array {
+ return ['column22'=>['value'=>$id],'column1'=>['value'=>$amount],'column14'=>['value'=>$currency],
+  'column0'=>['value'=>$day],'column5'=>['value'=>$vs],'column16'=>['value'=>$message]];
+}
+function bank_statement(string $iban,?array $rows): array {
+ return ['accountStatement'=>['info'=>['iban'=>$iban,'currency'=>'CZK'],'transactionList'=>['transaction'=>$rows]]];
+}
+$today=$bankDay->format('Y-m-d');
+$ref='MMVS-'.$eurOrder['vs'];
+$wrong=[
+ bank_row('100',80,'CZK',$today,$eurOrder['vs'],$ref),
+ bank_row('101',80,null,$today,'',$ref),
+ bank_row('102','80.001','EUR',$today,'',$ref),
+ bank_row('103',-80,'EUR',$today,'',$ref),
+ bank_row('104',80,'EUR',$bankDay->modify('-1 day')->format('Y-m-d'),'',$ref),
+ bank_row('105',80,'EUR',$today,$cleanOrder['vs'],$ref),
+ bank_row('106',80,'EUR',$today,'',$ref.' MMVS-'.$cleanOrder['vs']),
+ bank_row('107',81,'EUR',$today,'',$ref),
+];
+$db=mm_db();
+check(mm_fio_reconcile($db,bank_statement(MM_IBAN,$wrong),$periodStart,$bankDay)===['CZK'=>0,'EUR'=>0],
+ 'Fio rejects converted, missing-currency, inexact, outgoing, predating and ambiguous transactions');
+$valid=[bank_row('108','80.00','EUR',$today,'',$ref),bank_row('109',3800,'CZK',$today,$cleanOrder['vs'])];
+try{
+ mm_fio_reconcile($db,bank_statement('CZ0000000000000000000000',$valid),$periodStart,$bankDay);
+ throw new LogicException('FAIL: wrong Fio destination accepted');
+}catch(RuntimeException $e){check(true,'wrong Fio statement IBAN rejected');}
+$db->exec("CREATE TRIGGER test_queue_failure BEFORE INSERT ON email_queue WHEN NEW.kind='paid_admin'
+ BEGIN SELECT RAISE(ABORT,'simulated queue failure'); END");
+try{
+ mm_fio_reconcile($db,bank_statement(MM_IBAN,$valid),$periodStart,$bankDay);
+ throw new LogicException('FAIL: queue failure ignored');
+}catch(PDOException $e){
+ $q=$db->prepare('SELECT status FROM orders WHERE id=?');$q->execute([$eurOrder['id']]);
+ check($q->fetchColumn()==='pending','payment status rolls back if its notifications cannot be queued');
+}
+$db->exec('DROP TRIGGER test_queue_failure');
+check(mm_fio_reconcile($db,bank_statement(MM_IBAN,$valid),$periodStart,$bankDay)===['CZK'=>1,'EUR'=>1],
+ 'same authenticated Fio statement reconciles CZK and EUR independently');
+check(mm_fio_reconcile($db,bank_statement(MM_IBAN,$valid),$periodStart,$bankDay)===['CZK'=>0,'EUR'=>0],
+ 'Fio replay cannot confirm or enqueue again');
+check((int)$db->query("SELECT COUNT(*) FROM email_queue WHERE kind IN ('paid_client','paid_admin')")->fetchColumn()===4,
+ 'only verified payments queue both notices');
+$q=$db->prepare('SELECT * FROM orders WHERE id=?');$q->execute([$gift['id']]);$paidGift=$q->fetch();
+$template=mm_mail_template($paidGift,'paid_client');
+check(str_contains($template['html'],'cid:mm-gift-qr@moje-masaze')&&$template['inline_qr_token']===$gift['token'],
+ 'paid gift HTML contains its private inline redemption QR');
+check(mm_mail_template($paidGift,'new_client')['inline_qr_token']===null,
+ 'order acknowledgement contains no redemption QR');
+if(function_exists('imagepng'))check(str_starts_with(mm_voucher_qr_png($gift['token'])??'',"\x89PNG"),'gift QR renders as PNG');
 
 echo "All smoke tests passed.\n";

@@ -6,7 +6,7 @@ const pay=$('#paymentResult'),formStatus=$('#formStatus'),paymentFeedback=$('#pa
 const original=new Map();document.querySelectorAll('[data-t]').forEach(el=>original.set(el,el.textContent));
 const originalHeading=new Map();for(const key of ['heroTitle','aboutTitle']){const el=document.querySelector('[data-t="'+key+'"]');if(el)originalHeading.set(el,el.innerHTML);}
 const ui={
- cs:{discount:'Úspora {sum} (sleva {percent} %)',notePlaceholder:'Co by vám pomohlo cítit se při masáži dobře?',paid:'Platba potvrzena',created:'Objednávka vytvořena. Termín potvrdíme individuálně.',giftCreated:'Objednávka poukazu vytvořena. Po potvrzené platbě obdržíte poukaz e-mailem.',working:'Vytvářím objednávku…',invalid:'Zkontrolujte povinné údaje.',failed:'Objednávku se nepodařilo vytvořit.',copyOk:'Údaje byly zkopírovány.',copyFail:'Kopírování se nezdařilo.',stillPending:'Banka zatím úhradu nepotvrdila.',paymentConfirmed:'Úhrada byla ověřena bankou.',checkFail:'Stav nyní nelze ověřit.',voucherOpen:'Otevřít a vytisknout poukaz ↗',currencyLabel:'Měna platby',rateText:'Přepočet kurzem ČNB: 1 EUR = {rate} CZK. Cena v EUR je zaokrouhlena na celé euro a potvrdí se při objednávce.',eurOff:'EUR platby zatím nejsou aktivní. Je potřeba ověřený účet a Fio API. Zvolte CZK.',rateMissing:'Kurz EUR nyní není dostupný. Zvolte CZK.',czkHint:'Platba v korunách na účet Fio.'},
+ cs:{discount:'Úspora {sum} (sleva {percent} %)',notePlaceholder:'Co by vám pomohlo cítit se při masáži dobře?',paid:'Platba potvrzena',created:'Objednávka vytvořena. Termín potvrdíme individuálně.',giftCreated:'Objednávka poukazu vytvořena. Po potvrzené platbě obdržíte poukaz e-mailem.',working:'Vytvářím objednávku…',invalid:'Zkontrolujte povinné údaje.',failed:'Objednávku se nepodařilo vytvořit.',copyOk:'Údaje byly zkopírovány.',copyFail:'Kopírování se nezdařilo.',stillPending:'Banka zatím úhradu nepotvrdila.',paymentConfirmed:'Úhrada byla ověřena bankou.',checkFail:'Stav nyní nelze ověřit.',voucherOpen:'Otevřít a vytisknout poukaz ↗',currencyLabel:'Měna platby',rateText:'Přepočet kurzem ČNB: 1 EUR = {rate} CZK. Cena v EUR je zaokrouhlena na celé euro a potvrdí se při objednávce.',eurOff:'EUR platby zatím nejsou aktivní. Zvolte CZK.',rateMissing:'Kurz EUR nyní není dostupný. Zvolte CZK.',czkHint:'Platba v korunách na účet Fio.'},
  sk:{currencyLabel:'Mena platby',rateText:'Prepočet kurzom ČNB: 1 EUR = {rate} CZK. Cena v EUR je zaokrúhlená na celé euro a potvrdí sa pri objednávke.',eurOff:'Platby v EUR zatiaľ nie sú aktívne. Zvoľte CZK.',rateMissing:'Kurz EUR nie je dostupný. Zvoľte CZK.',czkHint:'Platba v CZK na účet Fio.'},
  en:{currencyLabel:'Payment currency',rateText:'CNB reference rate: 1 EUR = {rate} CZK. EUR prices are rounded to whole euros; the final amount is confirmed when ordering.',eurOff:'EUR payments are not activated yet. Please select CZK.',rateMissing:'EUR exchange rate unavailable. Please select CZK.',czkHint:'CZK payment to Fio Bank.'},
  es:{currencyLabel:'Moneda de pago',rateText:'Cambio del banco central checo: 1 EUR = {rate} CZK. EUR se redondea a euros enteros. Importe final al confirmar.',eurOff:'Los pagos en EUR aún no están activos. Selecciona CZK.',rateMissing:'Cambio de EUR no disponible. Selecciona CZK.',czkHint:'Pago en CZK a Fio Bank.'},
@@ -58,12 +58,13 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'){menu.classList.remo
 document.querySelectorAll('[data-select-duration]').forEach(a=>a.addEventListener('click',()=>{duration.value=a.dataset.selectDuration;refresh();}));
 document.querySelectorAll('[data-select-gift]').forEach(a=>a.addEventListener('click',()=>{kind.value='gift';updateKind();pay.hidden=true;}));
 function updateKind(){const gift=kind.value==='gift';$('#recipientBox').hidden=!gift;$('#dateBox').hidden=false;$('#timeBox').hidden=false;$('#date').disabled=false;$('#time').disabled=false;}
+let submittingOrder=false;
 function renderPrice(){
  const czk=priceCents(),n=Number(quantity.value),full=(duration.value==='180'?300000:200000)*n;
  if(currency.value==='EUR'){
-  if(quote?.eur_enabled&&Number.isInteger(quote.eur_cents)){priceLabel.textContent=format(quote.eur_cents,'EUR');currencyHelp.textContent=t('rateText').replace('{rate}',String(quote.rate).replace('.',','));submit.disabled=false;}
-  else{priceLabel.textContent='— EUR';currencyHelp.textContent=t(quote?'eurOff':'rateMissing');submit.disabled=true;}
- }else{priceLabel.textContent=format(czk);currencyHelp.textContent=t('czkHint');submit.disabled=false;}
+  if(quote?.eur_enabled&&Number.isInteger(quote.eur_cents)){priceLabel.textContent=format(quote.eur_cents,'EUR');currencyHelp.textContent=t('rateText').replace('{rate}',String(quote.rate).replace('.',','));submit.disabled=submittingOrder;}
+  else{priceLabel.textContent='— EUR';currencyHelp.textContent=t(quote?.eur_enabled===false?'eurOff':'rateMissing');submit.disabled=true;}
+ }else{priceLabel.textContent=format(czk);currencyHelp.textContent=t('czkHint');submit.disabled=submittingOrder;}
  const saved=full-czk,pct=n===2?5:n===3?10:0;
  discountLabel.textContent=saved?t('discount').replace('{sum}',format(saved)).replace('{amount}',format(saved)).replace('{percent}',String(pct)):'';
 }
@@ -75,7 +76,7 @@ async function refresh(){
   const result=await res.json();if(id!==epoch)return;
   if(result.czk_cents!==priceCents())throw Error('mismatch');
   quote=result;renderPrice();
- }catch{if(id!==epoch)return;quote={eur_enabled:false,eur_cents:null};renderPrice();}
+ }catch{if(id!==epoch)return;renderPrice();}
 }
 for(const el of [duration,quantity,currency])el.addEventListener('change',refresh);
 kind.addEventListener('change',()=>{updateKind();pay.hidden=true;});
@@ -130,10 +131,11 @@ function renderQr(o){
  path.setAttribute('d',d);path.setAttribute('fill','#000');svg.append(path);$('#qrCode').replaceChildren(svg);
 }
 form.addEventListener('submit',async e=>{
- e.preventDefault();if(!form.checkValidity()){form.reportValidity();notice(t('invalid'),true);return;}
+ e.preventDefault();if(submittingOrder)return;
+ if(!form.checkValidity()){form.reportValidity();notice(t('invalid'),true);return;}
  if(currency.value==='EUR'&&!quote?.eur_enabled){notice(t('eurOff'),true);return;}
  const data=Object.fromEntries(new FormData(form));data.csrf=$('meta[name="mm-csrf"]').content;data.lang=lang;data.terms=form.elements.terms.checked;data.expected_amount_cents=currency.value==='EUR'?quote?.eur_cents:priceCents();
- submit.disabled=true;notice(t('working'));
+ submittingOrder=true;submit.disabled=true;notice(t('working'));
  try{
   const response=await fetch('order.php',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(data)});
   const raw=await response.text();let result;
@@ -153,7 +155,7 @@ form.addEventListener('submit',async e=>{
   $('#payState').textContent=t('pending');paymentFeedback.textContent=qrOk?'':'Objednávka byla uložena. Platební údaje jsou dostupné na platební stránce.';pay.hidden=false;notice(t(result.kind==='gift'?'giftCreated':'created'));
   pay.scrollIntoView({behavior:'smooth',block:'start'});
  }catch(err){notice(err.message||t('failed'),true);}
- finally{renderPrice();}
+ finally{submittingOrder=false;renderPrice();}
 });
 $('#copyPay').addEventListener('click',async()=>{
  if(!latestOrder)return;

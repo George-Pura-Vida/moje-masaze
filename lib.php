@@ -23,7 +23,7 @@ function mm_private_dir(): string {
   $env=getenv('MASSAGE_PRIVATE_DIR');
   $explicit=is_string($env)&&$env!=='';
   $primary=$explicit?$env:dirname(__DIR__).'/moje-masaze-private';
-  if(!str_starts_with($primary,'/'))throw new RuntimeException('MASSAGE_PRIVATE_DIR must be an absolute path.');
+  if(!str_starts_with($primary,'/') && !(DIRECTORY_SEPARATOR==='\\' && preg_match('~^[A-Za-z]:[/\\\\]~',$primary)))throw new RuntimeException('MASSAGE_PRIVATE_DIR must be an absolute path.');
   // Never silently switch away from existing client records if their original directory is unwritable.
   $candidates=[$primary];
   if(!$explicit&&!file_exists($primary)){
@@ -33,10 +33,21 @@ function mm_private_dir(): string {
   }
   foreach(array_unique($candidates) as $dir){
     if(is_link($dir)||(!is_dir($dir)&&!@mkdir($dir,0700,true)&&!is_dir($dir)))continue;
-    $resolved=realpath($dir);$public=realpath(__DIR__);
-    if($resolved===false||$public===false||$resolved===$public||str_starts_with($resolved,$public.'/'))continue;
+    $resolved=realpath($dir);
+    if($resolved===false)continue;
+    $privatePath=str_replace('\\','/',$resolved);
+    $webRoots=[__DIR__];
+    if(!empty($_SERVER['DOCUMENT_ROOT']))$webRoots[]=$_SERVER['DOCUMENT_ROOT'];
+    foreach($webRoots as $root){
+      $public=realpath($root);
+      if($public===false)continue;
+      $public=rtrim(str_replace('\\','/',$public),'/');
+      if(DIRECTORY_SEPARATOR==='\\'){$public=strtolower($public);$privatePath=strtolower($privatePath);}
+      if($privatePath===$public||str_starts_with($privatePath,$public.'/'))continue 2;
+    }
     @chmod($dir,0700);
-    if(!is_writable($dir))continue;
+    clearstatcache(true,$dir);
+    if(!is_writable($dir)||(DIRECTORY_SEPARATOR==='/'&&(fileperms($dir)&0077)!==0))continue;
     // PHP-FPM may report a writable directory but still reject actual file creation.
     $probe=$dir.'/.probe-'.bin2hex(random_bytes(5));
     if(@file_put_contents($probe,'ok',LOCK_EX)===false)continue;
@@ -69,10 +80,13 @@ function mm_config(string $key,string $default=''): string {
 }
 
 function mm_db(): PDO {
-  static $db;
-  if($db instanceof PDO)return $db;
+  static $ready;
+  if($ready instanceof PDO)return $ready;
   if(!extension_loaded('pdo_sqlite'))throw new RuntimeException('Missing PHP pdo_sqlite extension. Enable it in WebKitty PHP settings.');
   $file=mm_private_dir().'/orders.sqlite';
+  foreach(['','-journal','-wal','-shm'] as $suffix){
+    if(is_link($file.$suffix))throw new RuntimeException('Unsafe SQLite storage path.');
+  }
   $db=new PDO('sqlite:'.$file,null,null,[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC]);
   $db->exec('PRAGMA busy_timeout=5000');
   $db->exec('PRAGMA foreign_keys=ON');
@@ -84,6 +98,8 @@ function mm_db(): PDO {
     error_log('MM database: WAL unavailable, using DELETE journal mode.');
     $db->exec('PRAGMA journal_mode=DELETE');
   }
+  $db->exec('BEGIN IMMEDIATE');
+  try {
   $db->exec("CREATE TABLE IF NOT EXISTS orders (
  id TEXT PRIMARY KEY,
  token TEXT NOT NULL UNIQUE,
@@ -154,8 +170,10 @@ CREATE TABLE IF NOT EXISTS massage_blocks (
   if(!in_array('client_id',$names,true))$db->exec("ALTER TABLE orders ADD COLUMN client_id TEXT NOT NULL DEFAULT ''");
   require_once __DIR__.'/crm.php';
   mm_crm_migrate($db);
+  $db->exec('COMMIT');
+  }catch(Throwable $e){$db->exec('ROLLBACK');throw $e;}
   @chmod($file,0600);
-  return $db;
+  return $ready=$db;
 }
 function mm_price(int $duration,int $quantity): int {
   if(!in_array($duration,[60,180],true)||!in_array($quantity,[1,2,3],true))throw new InvalidArgumentException('Neplatný balíček.');
@@ -169,7 +187,7 @@ function mm_eur_iban(): string {
  // bank confirmation for EUR must not rely on an incoming CZK amount.
  $raw=mm_config('MASSAGE_EUR_IBAN',MM_IBAN);
  $iban=strtoupper(preg_replace('/\s+/','',$raw));
- return preg_match('/\A[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}\z/D',$iban)?$iban:'';
+  return $iban===MM_IBAN?MM_IBAN:'';
 }
 function mm_eur_enabled(): bool {
  // Do not require an imaginary second EUR account or EUR Fio API token.
@@ -326,6 +344,13 @@ function mm_json(int $status,array $value): never {
   echo json_encode($value,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);
   exit;
 }
+function mm_form_origin_allowed(): bool {
+  $origin=(string)($_SERVER['HTTP_ORIGIN']??'');
+  $host=(string)($_SERVER['HTTP_HOST']??'');
+  if($origin===''||hash_equals('https://'.$host,$origin))return true;
+  return preg_match('/\A(?:localhost|127\.0\.0\.1|\[::1\])(?::[0-9]+)?\z/D',$host)===1
+    && hash_equals('http://'.$host,$origin);
+}
 function mm_rate_limit(string $ip): void {
   $db=mm_db();$h=hash('sha256',$ip.'|mm-salt');$hour=gmdate('YmdH');
   $db->exec("DELETE FROM rate WHERE hour < '".gmdate('YmdH',time()-7200)."'");
@@ -396,8 +421,8 @@ function mm_create_order(array $in,string $ip): array {
     }
   }
   mm_queue($id,'new_client');mm_queue($id,'new_admin');
-  $db->commit();
-  }catch(Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
+  $db->exec('COMMIT');
+  }catch(Throwable $e){$db->exec('ROLLBACK');throw $e;}
   return ['id'=>$id,'token'=>$token,'vs'=>$vs,'amount'=>$amount/100,'kind'=>$kind,'currency'=>$currency,'iban'=>$quote['iban'],'bic'=>$quote['bic'],'account'=>$quote['account']];
 }
 function mm_queue(string $id,string $kind): void {
@@ -555,6 +580,14 @@ function mm_send(string $to,array $template): bool {
  }
  return mail($to,mm_header_encoded((string)$template['subject']),$body,$headers);
 }
+/** Serialize each mail queue across web requests and cron. Closing releases the lock. */
+function mm_mail_queue_lock(string $queue) {
+   $lock=fopen(mm_private_dir().'/'.$queue.'.lock','c');
+   if($lock===false)throw new RuntimeException('Mail queue lock unavailable.');
+   if(flock($lock,LOCK_EX|LOCK_NB))return $lock;
+   fclose($lock);
+   return null;
+}
 function mm_dispatch_mail(int $max=20): array {
   $db=mm_db();$rows=$db->query("SELECT q.id AS queue_id,q.kind AS mail_kind,o.* FROM email_queue q JOIN orders o ON o.id=q.order_id WHERE q.status IN ('pending','failed') ORDER BY q.id LIMIT ".max(1,min(50,$max)))->fetchAll();
   $count=['sent'=>0,'failed'=>0];
@@ -605,8 +638,8 @@ function mm_admin_update(string $id,string $action,array $data): array {
   $update=$db->prepare('UPDATE orders SET appointment_status=? WHERE id=?');
   $update->execute([$action==='cancel'?'cancelled':'completed',$id]);
  }else{throw new InvalidArgumentException('Neplatná akce.');}
- if($transaction)$db->commit();
- }catch(Throwable $e){if($transaction&&$db->inTransaction())$db->rollBack();throw $e;}
+ if($transaction)$db->exec('COMMIT');
+ }catch(Throwable $e){if($transaction)$db->exec('ROLLBACK');throw $e;}
  $q=$db->prepare('SELECT * FROM orders WHERE id=?');$q->execute([$id]);return $q->fetch();
 }
 function mm_appointment_notice(array $o,string $action): bool {

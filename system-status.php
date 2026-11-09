@@ -22,12 +22,12 @@ try{
   // Test the exact SQLite WRITE permission needed by booking and contact forms.
   try {
    $db->exec('BEGIN IMMEDIATE');
-   $q=$db->prepare("INSERT INTO meta(key,value) VALUES('healthcheck_write',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value");
-   $q->execute([bin2hex(random_bytes(6))]);
-   $db->rollBack();
+   try {
+    $q=$db->prepare("INSERT INTO meta(key,value) VALUES('healthcheck_write',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value");
+    $q->execute([bin2hex(random_bytes(6))]);
+   } finally {$db->exec('ROLLBACK');}
    $checks['database_write']=true;
   } catch(Throwable $writeError) {
-   if($db->inTransaction())$db->rollBack();
    error_log('MM readiness: SQLite write check failed: '.get_class($writeError).' '.substr($writeError->getMessage(),0,180));
   }
  }

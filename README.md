@@ -9,7 +9,7 @@ Zdroj: https://github.com/George-Pura-Vida/moje-masaze
 - Čeština, slovenština, angličtina, španělština a zjednodušená čínština.
 - Masážní služby, ceník, rezervace, dárkové poukazy, konzultace a profil maséra.
 - 60 minut za 2 000 Kč, 180 minut za 3 000 Kč; balíček 2× sleva 5 %, balíček 3× sleva 10 %.
-- Základní cena CZK, možnost EUR podle referenčního kurzu ČNB pouze po aktivaci ověřeného eurového účtu.
+- Základní cena CZK, možnost EUR podle referenčního kurzu ČNB se zaokrouhlením na celá eura.
 - QR bankovní platby s jedinečným VS, bankovní párování z Fio API a přehledné grafické e-maily.
 - Nezaplacená rezervace zůstává ve stavu čeká na platbu a její termín se potvrzuje samostatně.
 - Tisknutelné a čerpatelné dárkové poukazy po bankovním potvrzení platby.
@@ -22,7 +22,7 @@ Projekt používá PHP 8.2+, PDO SQLite a cURL.
 1. Git Version Control: repo George-Pura-Vida/moje-masaze, větev main, cílový adresář moje-masaze.
 2. V nastavení PHP povol PDO SQLite a cURL.
 3. Vytvoř mimo veřejný kořen webu soukromou složku jako sourozence adresáře projektu. Výchozí cesta aplikace je ../moje-masaze-private, práva složky 0700.
-4. Nastav bankovní tokeny a administrátorské heslo výhradně v serverové konfiguraci nebo v soukromých souborech. Nikdy je nedávej do GitHubu.
+4. Nastav bankovní token a administrátorské heslo výhradně v serverové konfiguraci nebo v soukromých souborech. Nikdy je nedávej do GitHubu.
 5. Zapni HTTPS a stiskni Deploy ve WebKitty. Pokud neexistuje explicitně nakonfigurovaný auto-deploy, samotné commity GitHub web neaktualizují.
 
 ## Soukromá konfigurace
@@ -33,16 +33,14 @@ Ve výchozí soukromé složce ../moje-masaze-private může být settings.json 
 {
   "MASSAGE_ADMIN_EMAIL": "jgjanousek@gmail.com",
   "MASSAGE_EUR_ENABLED": "0",
-  "MASSAGE_EUR_FIO_CONFIGURED": "0",
-  "MASSAGE_EUR_IBAN": "",
+  "MASSAGE_EUR_IBAN": "CZ8220100000000223366333",
   "MASSAGE_EUR_BIC": "FIOBCZPPXXX"
 }
 ~~~
 
-Hodnoty lze nastavit také serverovými proměnnými prostředí. Aktivuj EUR až po ověření EUR účtu a samostatného tokenu pro čtení.
+Hodnoty lze nastavit také serverovými proměnnými prostředí. Aktivuj EUR po ověření příjmu SEPA plateb na stejném IBAN jako pro CZK.
 
-- CZK Fio API token: proměnná MASSAGE_FIO_TOKEN pouze pro CLI, případně soukromý fio-token.txt (0600).
-- EUR token: proměnná MASSAGE_EUR_FIO_TOKEN pouze pro CLI, případně soukromý fio-token-eur.txt (0600).
+- Fio API token pro společný účet CZK/EUR: proměnná MASSAGE_FIO_TOKEN pouze pro CLI, případně soukromý fio-token.txt (0600).
 - Admin heslo: proměnná MASSAGE_ADMIN_PASSWORD_HASH nebo soukromý admin-hash.txt (0600), obsahuje pouze hash hesla, nikdy heslo samotné.
 - Volitelný adresář soukromých dat přes proměnnou MASSAGE_PRIVATE_DIR.
 
@@ -62,7 +60,12 @@ Na WebKitty nastav každých 5 minut (minute */5, hour/day/month/weekday *):
 /usr/bin/php84 /home/sites/1a/1/1f8017897e/moje-masaze/cron/fio-sync.php
 ~~~
 
-Tato cesta odpovídá dříve dodanému projektu. Pokud WebKitty používá jinou absolutní cestu, musíš ji změnit. Cron ověří IBAN účtu, měnu, přesnou částku, referenci, datum a Fio bankovní ID. Současně odešle potvrzovací e-maily z fronty.
+Tato cesta odpovídá dříve dodanému projektu. Pokud WebKitty používá jinou absolutní cestu, musíš ji změnit. Cron ověří IBAN účtu, měnu, přesnou částku, referenci, datum a Fio bankovní ID. Použije jeden výpis pro obě měny a přidá potvrzení do fronty ve stejné databázové transakci jako potvrzení úhrady. Připsání v CZK po měnové konverzi EUR objednávku nepotvrdí. Pro odesílání objednávek, kontaktů a poukazů spusť také samostatnou úlohu každých 5 minut:
+
+```sh
+/usr/bin/php84 /home/sites/1a/1/1f8017897e/moje-masaze/cron/mail-sync.php
+```
+
 
 Bezpečný diagnostický příkaz pro Test Command:
 
@@ -88,7 +91,7 @@ Před ostrým provozem otestuj na WebKitty:
 1. PHP, SQLite, HTTPS, zápis do soukromé složky a správnou doménu.
 2. Nastavení SPF/DKIM/DMARC a skutečné doručení e-mailů, protože úspěch PHP mail() neznamená doručení do schránky.
 3. Vytvoření CZK QR, skutečnou kontrolovanou platbu, přiřazení podle VS a samostatné zprávy klientovi i administrátorovi bez duplicit.
-4. EUR až po nastavení ověřeného IBAN a EUR Fio tokenu. Některé banky neotevřou EUR SPD QR, proto existují i ruční SEPA údaje.
+4. EUR až po ověření, že Fio vykazuje připsané EUR v měně EUR na společném IBAN. Některé banky neotevřou EUR SPD QR, proto existují i ruční SEPA údaje.
 5. Právní podmínky storna, refundací, doby platnosti poukazů a pravidla GDPR.
 6. Vlastní profilovou fotografii maséra. Nyní web používá profilový avatar připojeného GitHub účtu, který je nutné ověřit nebo nahradit.
 
