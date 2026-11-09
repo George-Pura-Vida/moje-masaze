@@ -37,6 +37,16 @@ if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
     ],'', '&',PHP_QUERY_RFC3986);
     header('Location: '.$url,true,302);exit;
    }
+  }elseif($action==='sync_existing'){
+   if(!mm_google_connected()){$error='Nejdříve propojte Google účet přes OAuth.';}
+   else{
+    try{
+     $rows=mm_db()->query("SELECT * FROM orders WHERE appointment_status='confirmed' AND confirmed_date>=date('now') ORDER BY confirmed_date,confirmed_time LIMIT 30")->fetchAll();
+     $success=0;$failed=0;
+     foreach($rows as $order){try{mm_google_sync_order($order);$success++;}catch(Throwable $e){$failed++;error_log('MM Google backfill: '.get_class($e));}}
+     $notice='Synchronizováno '.$success.' budoucích termínů.'.($failed>0?' Nepovedlo se: '.$failed.'; zkontrolujte konfiguraci.':'');
+    }catch(Throwable $e){$error='Hromadná synchronizace se nezdařila. Prohlédněte serverový log.';}
+   }
   }elseif($action==='disconnect'){
    try{
     $token=mm_google_read_token();
@@ -115,6 +125,7 @@ function e(mixed $x): string{return mm_escape($x);}
 <form method="post"><input type="hidden" name="csrf" value="<?=e(mm_csrf())?>"><input type="hidden" name="action" value="connect"><button type="submit" <?=$configured?'':'disabled'?>>Propojit Google Kalendář přes OAuth 2.0</button></form>
 <?php else:?>
 <p>Propojeno. Web může ověřovat obsazenost v Google Kalendáři a zapisovat potvrzené masáže pod účet <?=e(MM_GOOGLE_OWNER)?>.</p>
+<form method="post" style="margin-bottom:14px"><input type="hidden" name="csrf" value="<?=e(mm_csrf())?>"><input type="hidden" name="action" value="sync_existing"><button type="submit">↻ Synchronizovat až 30 budoucích potvrzených termínů</button></form>
 <form method="post" onsubmit="return confirm('Opravdu odebrat propojení s Google Kalendářem?')"><input type="hidden" name="csrf" value="<?=e(mm_csrf())?>"><input type="hidden" name="action" value="disconnect"><button type="submit" class="danger">Odpojit Google Kalendář</button></form>
 <?php endif;?></div>
 <div class="panel"><h2>3. Jak funguje synchronizace</h2>
