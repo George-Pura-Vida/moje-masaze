@@ -150,7 +150,7 @@ function h(mixed $s): string {return mm_escape($s);}
 <span><?=h($b['block_date'])?> · <?=h($b['start_time'])?>–<?=h($b['end_time'])?> · <?=h($b['note'])?></span>
 <button name="action" value="delete_block" onclick="return confirm('Odstranit blokaci?')" style="padding:5px 9px">×</button></form><?php endforeach;?></div><?php endif;?>
 </section>
-<?php require __DIR__."/admin-panels.php"; ?>
+<?php define("MM_AUTHENTICATED",true);require __DIR__."/admin-panels.php"; ?>
 <div id="orders"></div>
 <h2>Posledních 200 objednávek</h2><p class="muted">Bankovní platbu potvrzuje výhradně Fio API. Správce zde mění pouze termín a čerpání poukazů.</p>
 <div class="scroll"><table><thead><tr><th>Objednávka</th><th>Klient</th><th>Služba</th><th>Úhrada</th><th>Správa</th></tr></thead><tbody>
