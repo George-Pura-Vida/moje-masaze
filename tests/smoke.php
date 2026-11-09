@@ -5,6 +5,7 @@ if(!mkdir($dir,0700,true))throw new RuntimeException('Test temp directory unavai
 putenv('MASSAGE_PRIVATE_DIR='.$dir);
 putenv('MASSAGE_EUR_ENABLED=0');
 require_once dirname(__DIR__).'/lib.php';
+if(session_status()!==PHP_SESSION_ACTIVE)session_start();
 function check(bool $ok,string $message): void {if(!$ok)throw new RuntimeException('FAIL: '.$message);echo "PASS: ".$message."\n";}
 function delete_tree(string $dir): void {
  foreach(scandir($dir)?:[] as $f){
@@ -23,12 +24,12 @@ check(mm_price(180,3)===810000,'three 180-minute sessions discounted by 10%');
 try{mm_price(10,1);throw new RuntimeException('FAIL: accepted invalid duration');}catch(InvalidArgumentException $e){check(true,'invalid duration is rejected');}
 try{mm_quote(60,1,'EUR');throw new RuntimeException('FAIL: unconfigured EUR payments accepted');}catch(InvalidArgumentException $e){check(true,'EUR disabled without separate bank config');}
 check(mm_quote(60,1,'CZK')['amount_cents']===200000,'CZK quote');
-session_start();$csrf=mm_csrf();
+$csrf=mm_csrf();
 $input=['kind'=>'booking','focus'=>'holistic','duration'=>'60','count'=>'2','name'=>'Test Client','email'=>'demo@example.org','phone'=>'+420 700 111 222','date'=>'','time'=>'','note'=>'','recipient'=>'','website'=>'','lang'=>'en','currency'=>'CZK','terms'=>true,'csrf'=>$csrf];
 $order=mm_create_order($input,'192.0.2.1');
 check(strlen($order['token'])===48,'unpredictable private order token');
 check(preg_match('/\A57[0-9]{8}\z/D',$order['vs'])===1,'unique ten-digit order variable symbol');
-check($order['amount']===3800.0,'server recomputes price');
+check((float)$order['amount']===3800.0,'server recomputes price');
 check($order['currency']==='CZK','server returns payment currency');
 $q=mm_db()->prepare('SELECT * FROM orders WHERE id=?');$q->execute([$order['id']]);$row=$q->fetch();
 check($row!==false && $row['status']==='pending','new order is unpaid');
