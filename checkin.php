@@ -5,6 +5,7 @@ ini_set('session.use_strict_mode','1');
 session_set_cookie_params(['lifetime'=>0,'path'=>'/','secure'=>(!empty($_SERVER['HTTPS'])&&$_SERVER['HTTPS']!=='off'),'httponly'=>true,'samesite'=>'Lax']);
 session_start();
 require_once __DIR__.'/lib.php';
+require_once __DIR__.'/admin-auth.php';
 header('Content-Type: text/html; charset=utf-8');
 header('Cache-Control: no-store');
 header('X-Robots-Tag: noindex,nofollow,noarchive');
@@ -12,7 +13,7 @@ header('X-Frame-Options: DENY');
 header('Referrer-Policy: no-referrer');
 $token=$_GET['code']??$_POST['code']??'';
 if(!is_string($token)||!preg_match('/\A[a-f0-9]{48}\z/D',$token)){http_response_code(404);exit('Neplatný vstupní QR kód.');}
-$admin=($_SESSION['mm_admin_auth']??false)===true;
+$admin=mm_admin_is_logged_in();
 if(!$admin){http_response_code(403);}
 $error='';$ok='';
 if($admin&&($_SERVER['REQUEST_METHOD']??'GET')==='POST'){
