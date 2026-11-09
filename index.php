@@ -104,7 +104,7 @@ header('X-Frame-Options: SAMEORIGIN');
    </div>
    <label><span data-contact="message">Vaše zpráva *</span><textarea name="message" rows="5" maxlength="2500" minlength="10" required placeholder="Napište, s čím vám mohu pomoci…"></textarea></label>
    <div class="honeypot" aria-hidden="true"><label>Web <input name="website" tabindex="-1" autocomplete="off"></label></div>
-   <label class="check"><input name="terms" type="checkbox" required><span data-contact="consent">Souhlasím se zpracováním údajů pouze pro vyřízení dotazu a odpověď. <a href="privacy.php">Ochrana osobních údajů</a>.</span></label>
+   <label class="check"><input name="terms" type="checkbox" required><span><span data-contact="consent">Souhlasím se zpracováním údajů pouze pro vyřízení dotazu a odpověď.</span> <a href="privacy.php" data-contact="privacy">Ochrana osobních údajů</a>.</span></label>
    <button id="sendMessage" class="btn btn-dark" type="submit" data-contact="send">Odeslat zprávu ↗</button>
    <p id="messageStatus" role="status" aria-live="polite"></p>
   </form>
