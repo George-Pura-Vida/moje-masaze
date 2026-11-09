@@ -18,6 +18,18 @@ let quote=null,latestOrder=null,epoch=0;
 function t(k){return translations[lang]?.[k]||ui[lang]?.[k]||ui.cs[k]||k;}
 function format(cents,ccy='CZK'){return new Intl.NumberFormat(regional[lang],{style:'currency',currency:ccy,minimumFractionDigits:ccy==='EUR'?2:0,maximumFractionDigits:ccy==='EUR'?2:0}).format(cents/100);}
 function priceCents(){const base=duration.value==='180'?300000:200000,n=Number(quantity.value),pct=n===2?95:n===3?90:100;return base*n*pct/100;}
+const contactCopy={
+ cs:{eyebrow:'OSOBNÍ KONTAKT',title:'Napište mi. Rád odpovím.',description:'Máte otázku k masážím, volným termínům nebo dárkovým poukazům? Nechte mi zprávu. Odpověď dostanete osobně.',name:'Jméno a příjmení *',email:'E-mail *',phone:'Telefon (nepovinný)',subject:'Předmět zprávy *',subjectMassage:'Dotaz k masáži',subjectBooking:'Termíny a rezervace',subjectGift:'Dárkové poukazy',subjectOther:'Jiný dotaz',message:'Vaše zpráva *',consent:'Souhlasím se zpracováním údajů pouze pro vyřízení dotazu a odpověď.',privacy:'Ochrana osobních údajů',send:'Odeslat zprávu ↗',adminLink:'Administrace',sending:'Odesílám zprávu…',sent:'Děkuji! Zpráva je bezpečně uložena. Potvrzení přijde e-mailem.',error:'Zprávu nelze odeslat. Zkuste to prosím znovu.',invalid:'Doplňte povinné údaje.'},
+ sk:{eyebrow:'OSOBNÝ KONTAKT',title:'Napíšte mi. Rád odpoviem.',description:'Máte otázky k masážam, termínom alebo poukazom? Pošlite mi správu.',name:'Meno a priezvisko *',email:'E-mail *',phone:'Telefón (voliteľný)',subject:'Predmet správy *',subjectMassage:'Otázka k masáži',subjectBooking:'Termíny a rezervácie',subjectGift:'Darčekové poukazy',subjectOther:'Iná otázka',message:'Vaša správa *',consent:'Súhlasím so spracovaním údajov na vybavenie otázky a odpoveď.',privacy:'Ochrana osobných údajov',send:'Odoslať správu ↗',adminLink:'Administrácia',sending:'Odosielam správu…',sent:'Ďakujem! Správa bola uložená. Potvrdenie príde e-mailom.',error:'Správu nemožno odoslať.',invalid:'Doplňte povinné údaje.'},
+ en:{eyebrow:'GET IN TOUCH',title:'Have a question? I’m here to help.',description:'Ask about massages, available times or gift vouchers. I will respond personally.',name:'Full name *',email:'Email *',phone:'Phone (optional)',subject:'Message subject *',subjectMassage:'Question about a massage',subjectBooking:'Appointments and reservations',subjectGift:'Gift vouchers',subjectOther:'Other question',message:'Your message *',consent:'I agree to the processing of my details only to answer this enquiry.',privacy:'Privacy policy',send:'Send message ↗',adminLink:'Administration',sending:'Sending your message…',sent:'Thank you! Your message has been saved. A confirmation email will follow.',error:'Unable to send the message.',invalid:'Please complete the required fields.'},
+ es:{eyebrow:'CONTACTO PERSONAL',title:'Escríbeme. Estaré encantado de responder.',description:'¿Tienes preguntas sobre masajes, horarios o tarjetas regalo? Envíame un mensaje.',name:'Nombre completo *',email:'Correo electrónico *',phone:'Teléfono (opcional)',subject:'Asunto *',subjectMassage:'Consulta sobre masajes',subjectBooking:'Citas y reservas',subjectGift:'Tarjetas regalo',subjectOther:'Otra consulta',message:'Tu mensaje *',consent:'Acepto el tratamiento de los datos únicamente para responder a mi consulta.',privacy:'Privacidad',send:'Enviar mensaje ↗',adminLink:'Administración',sending:'Enviando mensaje…',sent:'¡Gracias! Tu mensaje se ha guardado. Recibirás una confirmación por email.',error:'No se pudo enviar el mensaje.',invalid:'Completa los campos obligatorios.'},
+ zh:{eyebrow:'直接联系',title:'欢迎留言，我会亲自回复。',description:'对按摩、预约时间或礼品券有疑问？请给我留言。',name:'姓名 *',email:'邮箱 *',phone:'电话（选填）',subject:'主题 *',subjectMassage:'按摩咨询',subjectBooking:'预约与时间',subjectGift:'礼品券',subjectOther:'其他问题',message:'留言 *',consent:'我同意仅为回复咨询而处理我的联系信息。',privacy:'隐私政策',send:'发送消息 ↗',adminLink:'管理后台',sending:'正在发送…',sent:'谢谢！您的留言已保存，确认邮件稍后发送。',error:'暂时无法发送消息。',invalid:'请填写必填信息。'}
+};
+function renderContactLanguage(){
+ const messages=contactCopy[lang]||contactCopy.cs;
+ document.querySelectorAll('[data-contact]').forEach(el=>{const key=el.dataset.contact;if(messages[key])el.textContent=messages[key];});
+}
+
 function renderLang(){
  document.documentElement.lang=lang==='zh'?'zh-CN':lang;$('#langPicker').value=lang;
  document.querySelectorAll('[data-t]').forEach(el=>{
@@ -30,6 +42,7 @@ function renderLang(){
  form.querySelectorAll('[data-ph]').forEach(el=>el.placeholder=t(el.dataset.ph));
  form.querySelector('.currency-choice label>span').textContent=t('currencyLabel');
  setSlotNotice($('#date').value?'ready':'initial');
+ renderContactLanguage();
  document.title=({cs:'Moje masáže',sk:'Moje masáže',en:'My Massages',es:'Mis masajes',zh:'我的按摩'})[lang]+' · Dotyk & klid';
  renderPrice();
 }
@@ -148,4 +161,22 @@ $('#checkPay').addEventListener('click',async()=>{
   }
  }catch{paymentFeedback.textContent=t('checkFail');}
 });
+const messageForm=$('#messageForm'),messageStatus=$('#messageStatus'),messageButton=$('#sendMessage');
+if(messageForm&&messageStatus&&messageButton){
+ messageForm.addEventListener('submit',async e=>{
+  e.preventDefault();
+  const msg=contactCopy[lang]||contactCopy.cs;
+  if(!messageForm.checkValidity()){messageForm.reportValidity();messageStatus.textContent=msg.invalid;messageStatus.classList.add('error');return;}
+  const data=Object.fromEntries(new FormData(messageForm));data.terms=messageForm.elements.terms.checked;data.csrf=$('meta[name="mm-csrf"]').content;
+  messageButton.disabled=true;messageStatus.textContent=msg.sending;messageStatus.classList.remove('error');
+  try{
+   const result=await fetch('contact-message.php',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(data)});
+   const body=await result.json();
+   if(!result.ok)throw Error(body.error||msg.error);
+   messageForm.reset();messageStatus.textContent=msg.sent;
+  }catch(err){messageStatus.textContent=err.message||msg.error;messageStatus.classList.add('error');}
+  finally{messageButton.disabled=false;}
+ });
+}
+
 updateKind();renderLang();refresh();refreshSlots();
