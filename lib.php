@@ -247,6 +247,57 @@ function mm_mail_template(array $o,string $kind): array {
   if($admin)$head=$paid?'Nová uhrazená objednávka':'Nový požadavek na masáž';
   $intro=$admin?'Zpráva pro administrátora.':
     ($paid?($gift?'Platba byla ověřena podle bankovního výpisu. Děkujeme za objednávku.':'Vaše úhrada byla ověřena bankou. Termín ještě osobně potvrdíme.'):'Děkujeme za objednávku. Proveďte platbu pomocí QR kódu a variabilního symbolu. Rezervovaný termín zatím není potvrzen.');
+  $lang=$admin?'cs':(in_array(($o['lang']??'cs'),['cs','sk','en','es','zh'],true)?$o['lang']:'cs');
+  $salutation=mm_salutation((string)$o['buyer_name']);
+  $localizations=[
+    'sk'=>[
+      'salutation'=>'Dobrý deň,',
+      'subjectNew'=>'🌿 Objednávka prijatá • Moje masáže','subjectPaid'=>'✅ Potvrdenie úhrady • Moje masáže','subjectGift'=>'🎁 Váš darčekový poukaz • Moje masáže',
+      'headNew'=>'Vaša objednávka bola prijatá','headGift'=>'Poukaz čaká na úhradu','headPaid'=>'Platba bola potvrdená','headPaidGift'=>'Darčekový poukaz je pripravený',
+      'introNew'=>'Ďakujeme za objednávku. Pre platbu použite QR kód a variabilný symbol. Termín zatiaľ nie je potvrdený.',
+      'introPaid'=>'Úhradu potvrdila banka. Termín masáže ešte osobne potvrdíme.',
+      'introGiftPaid'=>'Platba bola overená bankou. Ďakujeme. Váš poukaz je pripravený.',
+      'link'=>'Otvoriť platobný QR kód','voucher'=>'Zobraziť darčekový poukaz','pay'=>'Skontrolujte bankový účet, sumu a platobnú referenciu.',
+      'fields'=>['Objednávka'=>'Objednávka','Masáž'=>'Masáž','Délka'=>'Trvanie','Počet masáží'=>'Počet masáží','Cena'=>'Cena','Variabilní symbol'=>'Variabilný symbol','Pro koho'=>'Pre koho','Preferovaný termín'=>'Preferovaný termín']
+    ],
+    'en'=>[
+      'salutation'=>'Hello,',
+      'subjectNew'=>'🌿 Order received • My Massages','subjectPaid'=>'✅ Payment confirmed • My Massages','subjectGift'=>'🎁 Your gift voucher • My Massages',
+      'headNew'=>'Your order has been received','headGift'=>'Gift voucher awaiting payment','headPaid'=>'Payment confirmed','headPaidGift'=>'Your gift voucher is ready',
+      'introNew'=>'Thank you for your order. Please pay using the QR code and payment reference. Your preferred appointment has not been confirmed yet.',
+      'introPaid'=>'The bank has confirmed your payment. We will confirm your massage appointment separately.',
+      'introGiftPaid'=>'Your payment has been verified by the bank. Thank you for your order.',
+      'link'=>'Open payment QR code','voucher'=>'View gift voucher','pay'=>'Check the bank account, exact amount and payment reference before paying.',
+      'fields'=>['Objednávka'=>'Order','Masáž'=>'Massage','Délka'=>'Duration','Počet masáží'=>'Sessions','Cena'=>'Price','Variabilní symbol'=>'Payment reference','Pro koho'=>'Recipient','Preferovaný termín'=>'Preferred appointment']
+    ],
+    'es'=>[
+      'salutation'=>'Hola,',
+      'subjectNew'=>'🌿 Pedido recibido • Mis masajes','subjectPaid'=>'✅ Pago confirmado • Mis masajes','subjectGift'=>'🎁 Tu tarjeta regalo • Mis masajes',
+      'headNew'=>'Hemos recibido tu pedido','headGift'=>'Tarjeta regalo pendiente de pago','headPaid'=>'Pago confirmado','headPaidGift'=>'Tu tarjeta regalo está lista',
+      'introNew'=>'Gracias por tu pedido. Paga con el código QR y la referencia indicada. La cita aún no está confirmada.',
+      'introPaid'=>'El banco ha confirmado el pago. Confirmaremos la cita por separado.',
+      'introGiftPaid'=>'El banco ha verificado el pago. Muchas gracias por tu pedido.',
+      'link'=>'Abrir QR de pago','voucher'=>'Ver tarjeta regalo','pay'=>'Comprueba la cuenta, el importe exacto y la referencia antes de pagar.',
+      'fields'=>['Objednávka'=>'Pedido','Masáž'=>'Masaje','Délka'=>'Duración','Počet masáží'=>'Sesiones','Cena'=>'Precio','Variabilní symbol'=>'Referencia de pago','Pro koho'=>'Destinatario','Preferovaný termín'=>'Fecha preferida']
+    ],
+    'zh'=>[
+      'salutation'=>'您好，',
+      'subjectNew'=>'🌿 订单已收到 • 我的按摩','subjectPaid'=>'✅ 付款已确认 • 我的按摩','subjectGift'=>'🎁 您的礼品券 • 我的按摩',
+      'headNew'=>'您的订单已收到','headGift'=>'礼品券等待付款','headPaid'=>'付款已确认','headPaidGift'=>'您的礼品券已准备好',
+      'introNew'=>'感谢您的订单。请使用付款二维码及付款识别码支付。预约时间仍需另行确认。',
+      'introPaid'=>'银行已确认收款。按摩预约时间将另行确认。',
+      'introGiftPaid'=>'银行已核实收款。感谢您的订单。',
+      'link'=>'打开付款二维码','voucher'=>'查看礼品券','pay'=>'付款前请核对银行账户、金额和付款识别码。',
+      'fields'=>['Objednávka'=>'订单','Masáž'=>'按摩','Délka'=>'时长','Počet masáží'=>'次数','Cena'=>'价格','Variabilní symbol'=>'付款识别码','Pro koho'=>'赠予对象','Preferovaný termín'=>'期望时间']
+    ]
+  ];
+  $L=$localizations[$lang]??null;
+  if($L!==null && !$admin){
+    $salutation=$L['salutation'];
+    $head=$paid?($gift?$L['headPaidGift']:$L['headPaid']):($gift?$L['headGift']:$L['headNew']);
+    $intro=$paid?($gift?$L['introGiftPaid']:$L['introPaid']):$L['introNew'];
+    $subject=$paid?($gift?$L['subjectGift']:$L['subjectPaid']):$L['subjectNew'];
+  }
   $fields=[
    'Objednávka'=>$gift?'Dárkový poukaz':'Rezervace masáže',
    'Masáž'=>MM_FOCUS[$o['focus']]??$o['focus'],
@@ -259,17 +310,24 @@ function mm_mail_template(array $o,string $kind): array {
   if($gift&&$o['recipient']!=='')$fields['Pro koho']=$o['recipient'];
   if(!$gift&&$o['preferred_date']!=='')$fields['Preferovaný termín']=$o['preferred_date'].' '.$o['preferred_time'];
   if($admin&&$o['note']!=='')$fields['Poznámka']=$o['note'];
+  if($L!==null && !$admin){
+    $translated=[];foreach($fields as $label=>$value)$translated[$L['fields'][$label]??$label]=$value;
+    $fields=$translated;
+  }
   $url='https://moje-masaze.jirijanousek.cz/voucher.php?token='.rawurlencode($o['token']);
-  if($paid&&$gift&&!$admin)$intro.=' Váš poukaz můžete otevřít a vytisknout zde: '.$url;
-  $plain=($admin?'Dobrý den, administrátore,':mm_salutation($o['buyer_name']))."\n\n".$head."\n\n".$intro."\n";
+  $payUrl='https://moje-masaze.jirijanousek.cz/payment.php?token='.rawurlencode($o['token']);
+  if($paid&&$gift&&!$admin)$intro.=' '.($L['voucher']??'Váš poukaz si můžete zobrazit zde:').' '.$url;
+  if(!$paid&&!$admin)$intro.=' '.($L['link']??'QR platbu si otevřete zde:').' '.$payUrl;
+  $plain=($admin?'Dobrý den, administrátore,':$salutation)."\n\n".$head."\n\n".$intro."\n";
   foreach($fields as $key=>$value)$plain.=$key.': '.$value."\n";
   if(!$paid)$plain.="Účet/IBAN: ".(($o['currency']??'CZK')==='EUR'?($o['bank_iban']?:mm_eur_iban()):MM_ACCOUNT)."\nIBAN: ".(($o['currency']??'CZK')==='EUR'?($o['bank_iban']?:mm_eur_iban()):MM_IBAN)."\n";
   $plain.="\nJiří Janoušek | Moje masáže\ninfo@jirijanousek.cz\n";
   $rows='';foreach($fields as $key=>$value){$rows.='<tr><td style="padding:10px;border-bottom:1px solid #eee4d6;color:#6c6a61">'.mm_escape($key).'</td><td style="padding:10px;border-bottom:1px solid #eee4d6;color:#2e382f;font-weight:700">'.mm_escape($value).'</td></tr>';}
   $extra='';
-  if(!$paid)$extra='<p style="background:#f9f2e5;padding:15px;border-radius:9px">Před potvrzením úhrady zkontrolujte měnu, částku, účet <strong>'.mm_escape(($o['currency']??'CZK')==='EUR'?($o['bank_iban']?:mm_eur_iban()):MM_ACCOUNT).'</strong> a VS <strong>'.mm_escape($o['vs']).'</strong>. U EUR platby uveďte také referenci MMVS-'.mm_escape($o['vs']).' ve zprávě pro příjemce. Samotný QR kód není dokladem platby.</p>';
-  if($paid&&$gift&&!$admin)$extra='<p style="margin:26px 0"><a href="'.mm_escape($url).'" style="background:#aa7d47;color:#fff;padding:13px 24px;text-decoration:none;border-radius:8px;font-weight:700">🎁 Zobrazit dárkový poukaz</a></p>';
-  $html='<!doctype html><html lang="cs"><head><meta charset="utf-8"></head><body style="background:#f6f1e8;margin:0;padding:24px 10px;font-family:Arial,Helvetica,sans-serif;color:#273227"><table role="presentation" style="max-width:640px;width:100%;border-collapse:collapse;margin:auto;background:#fff;border:1px solid #e4d8c7"><tr><td style="padding:29px;background:#1d2a21;color:#fff;border-bottom:5px solid #c7a06d"><div style="font-family:Georgia,serif;font-size:27px;color:#e8c99d">❁ DOTYK &amp; KLID</div><div style="font-size:12px;letter-spacing:2px;color:#e5e6da">MOJE MASÁŽE • JIŘÍ JANOUŠEK</div></td></tr><tr><td style="padding:28px"><p>'.mm_escape($admin?'Dobrý den, administrátore,':mm_salutation($o['buyer_name'])).'</p><h1 style="font-family:Georgia,serif;font-size:27px;font-weight:400">'.mm_escape($head).'</h1><p>'.mm_escape($intro).'</p><table role="presentation" style="width:100%;background:#fbf8f2;border-collapse:collapse">'.$rows.'</table>'.$extra.'<p style="margin-top:30px;font-size:13px;color:#696b63">S přáním krásného dne,<br><strong>Jiří Janoušek</strong><br>info@jirijanousek.cz<br>+420 777 796 148</p></td></tr><tr><td style="background:#e9e6dd;padding:15px 28px;font-size:11px;color:#737267">Tato zpráva se týká výhradně vaší objednávky. Nejde o reklamní sdělení.</td></tr></table></body></html>';
+  if(!$paid && !$admin)$extra='<p style="margin:22px 0"><a href="'.mm_escape($payUrl).'" style="display:inline-block;background:#b08351;color:#fff;padding:13px 22px;text-decoration:none;border-radius:8px;font-weight:bold">'.mm_escape($L['link']??'📱 Otevřít platební QR kód').'</a></p>';
+  if(!$paid)$extra.='<p style="background:#f9f2e5;padding:15px;border-radius:9px">Před potvrzením úhrady zkontrolujte měnu, částku, účet <strong>'.mm_escape(($o['currency']??'CZK')==='EUR'?($o['bank_iban']?:mm_eur_iban()):MM_ACCOUNT).'</strong> a VS <strong>'.mm_escape($o['vs']).'</strong>. U EUR platby uveďte také referenci MMVS-'.mm_escape($o['vs']).' ve zprávě pro příjemce. Samotný QR kód není dokladem platby.</p>';
+  if($paid&&$gift&&!$admin)$extra='<p style="margin:26px 0"><a href="'.mm_escape($url).'" style="background:#aa7d47;color:#fff;padding:13px 24px;text-decoration:none;border-radius:8px;font-weight:700">🎁 '.mm_escape($L['voucher']??'Zobrazit dárkový poukaz').'</a></p>';
+  $html='<!doctype html><html lang="cs"><head><meta charset="utf-8"></head><body style="background:#f6f1e8;margin:0;padding:24px 10px;font-family:Arial,Helvetica,sans-serif;color:#273227"><table role="presentation" style="max-width:640px;width:100%;border-collapse:collapse;margin:auto;background:#fff;border:1px solid #e4d8c7"><tr><td style="padding:29px;background:#1d2a21;color:#fff;border-bottom:5px solid #c7a06d"><div style="font-family:Georgia,serif;font-size:27px;color:#e8c99d">❁ DOTYK &amp; KLID</div><div style="font-size:12px;letter-spacing:2px;color:#e5e6da">MOJE MASÁŽE • JIŘÍ JANOUŠEK</div></td></tr><tr><td style="padding:28px"><p>'.mm_escape($admin?'Dobrý den, administrátore,':$salutation).'</p><h1 style="font-family:Georgia,serif;font-size:27px;font-weight:400">'.mm_escape($head).'</h1><p>'.mm_escape($intro).'</p><table role="presentation" style="width:100%;background:#fbf8f2;border-collapse:collapse">'.$rows.'</table>'.$extra.'<p style="margin-top:30px;font-size:13px;color:#696b63">S přáním krásného dne,<br><strong>Jiří Janoušek</strong><br>info@jirijanousek.cz<br>+420 777 796 148</p></td></tr><tr><td style="background:#e9e6dd;padding:15px 28px;font-size:11px;color:#737267">Tato zpráva se týká výhradně vaší objednávky. Nejde o reklamní sdělení.</td></tr></table></body></html>';
   return ['subject'=>$subject,'text'=>$plain,'html'=>$html];
 }
 function mm_send(string $to,array $template): bool {
