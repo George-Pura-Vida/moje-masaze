@@ -6,7 +6,7 @@ DirectoryIndex index.php
  Header always set Referrer-Policy "strict-origin-when-cross-origin"
  Header always set Permissions-Policy "geolocation=(),camera=(),microphone=()"
 </IfModule>
-<FilesMatch "^(README.*|.*\.md|.*\.env|.*\.sqlite|.*\.log|\.gitignore|lib\.php)$">
+<FilesMatch "^(README.*|.*\.md|.*\.env|.*\.sqlite|.*\.log|\.gitignore|lib\.php|crm\.php|coupon\.php|admin-auth\.php|admin-panels\.php)$">
  Require all denied
 </FilesMatch>
 <IfModule mod_rewrite.c>
