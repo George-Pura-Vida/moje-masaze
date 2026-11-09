@@ -334,15 +334,17 @@ function mm_rate_limit(string $ip): void {
   $q=$db->prepare('SELECT hits FROM rate WHERE ip_hash=? AND hour=?');$q->execute([$h,$hour]);
   if((int)$q->fetchColumn()>8)throw new RuntimeException('Příliš mnoho požadavků. Zkuste to prosím později.');
 }
-function mm_text(mixed $raw,int $max,bool $required=false): string {
-  if(!is_string($raw))throw new InvalidArgumentException('Neplatné údaje formuláře.');
-  $value=trim(preg_replace('/\s+/u',' ',$raw)??'');
-  if(strlen($value)>$max||preg_match('/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/',$value)||($required&&$value===''))throw new InvalidArgumentException('Vyplňte prosím platné údaje.');
+function mm_text(mixed $raw,int $max,bool $required=false,string $field='údaj'): string {
+  if(!is_string($raw))throw new InvalidArgumentException('Zkontrolujte pole „'.$field.'“.');
+  $value=trim(preg_replace('/\\s+/u',' ',$raw)??'');
+  if(strlen($value)>$max||preg_match('/[\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f\\x7f]/',$value)||($required&&$value===''))
+   throw new InvalidArgumentException('Zkontrolujte pole „'.$field.'“. Má být vyplněné ve správném formátu.');
   return $value;
 }
 function mm_create_order(array $in,string $ip): array {
   mm_rate_limit($ip);
-  if(($in['website']??'')!=='')throw new InvalidArgumentException('Požadavek nebyl přijat.');
+  // Do not reject real clients when password managers autofill obsolete honeypot fields.
+  // CSRF and per-IP rate limits still protect this endpoint.
   if(($in['terms']??null)!==true)throw new InvalidArgumentException('Potvrďte podmínky objednávky.');
   if(!isset($in['csrf'])||!is_string($in['csrf'])||!hash_equals(mm_csrf(),$in['csrf']))throw new InvalidArgumentException('Obnovte stránku a zkuste to znovu.');
   $kind=$in['kind']??null;$focus=$in['focus']??null;$duration=filter_var($in['duration']??null,FILTER_VALIDATE_INT);$quantity=filter_var($in['count']??null,FILTER_VALIDATE_INT);
@@ -356,15 +358,15 @@ function mm_create_order(array $in,string $ip): array {
     $expected=filter_var($in['expected_amount_cents'],FILTER_VALIDATE_INT);
     if($expected===false||$expected!==$amount)throw new InvalidArgumentException('Cena se od zobrazení změnila. Aktualizujte objednávku a potvrďte novou cenu.');
   }
-  $name=mm_text($in['name']??null,120,true);
-  $email=mm_text($in['email']??null,254,true);
+  $name=mm_text($in['name']??null,120,true,'Jméno a příjmení');
+  $email=mm_text($in['email']??null,254,true,'E-mail');
   if(!filter_var($email,FILTER_VALIDATE_EMAIL))throw new InvalidArgumentException('Zadejte platný e-mail.');
-  $phone=mm_text($in['phone']??null,25,true);
+  $phone=mm_text($in['phone']??null,25,true,'Telefon');
   if(!preg_match('/\A[0-9+()\s\-]{7,25}\z/D',$phone))throw new InvalidArgumentException('Zadejte platné telefonní číslo.');
-  $recipient=mm_text($in['recipient']??'',120);
-  $note=mm_text($in['note']??'',650);
-  $prefDate=mm_text($in['date']??'',10);
-  $prefTime=mm_text($in['time']??'',5);
+  $recipient=mm_text($in['recipient']??'',120,false,'Jméno obdarovaného');
+  $note=mm_text($in['note']??'',650,false,'Poznámka');
+  $prefDate=mm_text($in['date']??'',10,false,'Preferovaný termín');
+  $prefTime=mm_text($in['time']??'',5,false,'Preferovaná hodina');
   if($prefDate!==''){
     $date=DateTimeImmutable::createFromFormat('!Y-m-d',$prefDate,new DateTimeZone('Europe/Prague'));
     if(!$date||$date->format('Y-m-d')!==$prefDate||$date<new DateTimeImmutable('today',new DateTimeZone('Europe/Prague'))||$date>new DateTimeImmutable('+1 year',new DateTimeZone('Europe/Prague')))throw new InvalidArgumentException('Neplatný termín.');
