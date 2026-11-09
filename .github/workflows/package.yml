@@ -17,8 +17,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p package
-          cp -a index.php style.css app.js i18n.js i18n-sk.js i18n-en.js i18n-es.js i18n-zh.js lib.php crm.php admin-auth.php admin-panels.php contact-message.php order.php pricing.php status.php slots.php coupon.php voucher.php voucher-qr.php checkin.php calendar-feed.php payment.php admin.php privacy.php favicon.svg .htaccess package/
-          for required in index.php style.css app.js i18n.js lib.php crm.php admin-auth.php admin-panels.php contact-message.php order.php slots.php coupon.php voucher.php voucher-qr.php checkin.php calendar-feed.php payment.php admin.php privacy.php .htaccess; do
+          cp -a index.php style.css app.js i18n.js i18n-sk.js i18n-en.js i18n-es.js i18n-zh.js lib.php crm.php admin-auth.php admin-panels.php contact-message.php google-calendar-lib.php google-calendar.php order.php pricing.php status.php slots.php coupon.php voucher.php voucher-qr.php checkin.php calendar-feed.php payment.php admin.php privacy.php favicon.svg .htaccess package/
+          for required in index.php style.css app.js i18n.js lib.php crm.php admin-auth.php admin-panels.php contact-message.php google-calendar-lib.php google-calendar.php order.php slots.php coupon.php voucher.php voucher-qr.php checkin.php calendar-feed.php payment.php admin.php privacy.php .htaccess; do
             test -f "package/$required"
           done
           cp -a vendor package/
