@@ -12,11 +12,10 @@ try{
  $stmt=mm_db()->prepare("SELECT id FROM orders WHERE token=? AND kind='gift' AND status='paid' LIMIT 1");
  $stmt->execute([$token]);if(!$stmt->fetchColumn()){http_response_code(404);exit;}
 }catch(Throwable $e){http_response_code(503);exit;}
-if(!function_exists('imagepng')){http_response_code(503);exit;}
 require_once __DIR__.'/vendor/php-qrcode.php';
 $url='https://moje-masaze.jirijanousek.cz/checkin.php?code='.rawurlencode($token);
 try{
  $generator=new QRCode($url,['s'=>'qrm','sf'=>7,'p'=>15,'bc'=>'ffffff','fc'=>'21352b']);
- header('Content-Type: image/png');
- $generator->output_image();
+ if(function_exists('imagepng')){header('Content-Type: image/png');$generator->output_image();}
+ else{header('Content-Type: image/svg+xml; charset=utf-8');header("Content-Security-Policy: default-src 'none'; style-src 'none'");echo $generator->render_svg(6,4);}
 }catch(Throwable $e){error_log('Voucher QR: '.get_class($e));http_response_code(503);}
